@@ -1,0 +1,25 @@
+name: eyetracking_env
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.9
+  - ipython
+  - numpy
+  - scipy
+  - opencv
+  - pandas
+  - tqdm
+  - scikit-learn
+  - matplotlib
+  - imageio
+  - scikit-image
+  - pytables
+  - h5py
+  - xlrd
+  - openpyxl
+  - statsmodels
+  - seaborn
+  - av
+  - pims
+  - pip

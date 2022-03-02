@@ -1,0 +1,40 @@
+Metadata-Version: 2.1
+Name: alabeye
+Version: 0.0.1
+Summary: Adolphs Lab, eye tracking tools
+Home-page: UNKNOWN
+Maintainer: Umit Keles
+Maintainer-email: ukeles@caltech.edu
+License: UNKNOWN
+Platform: UNKNOWN
+Requires-Python: >=3.7
+Description-Content-Type: text/x-rst
+
+===============================
+Adolphs Lab, eye tracking tools
+===============================
+
+Eye tracking data analysis tools used in the Adolphs Lab.
+
+
+clone/download and installation
+===============================
+
+suggested way: clone the repository, set up a conda environment, and install develpment version in editable mode via:
+.. code-block:: bash
+    git clone https://github.com/adolphslab/adolphslab_eyetracking
+    cd adolphslab_eyetracking
+    conda env create --file make_env.yml
+    conda activate eyetrack_env
+    pip install -e .
+    
+
+alternatively, pip installation:
+.. code-block:: bash
+    git clone https://github.com/adolphslab/adolphslab_eyetracking
+    cd adolphslab_eyetracking
+    pip install -e .
+
+
+
+
