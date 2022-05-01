@@ -2,17 +2,16 @@
 # -*- coding: utf-8 -*-
 """
 
-Different colors to individual subjects.
+Plots Figure 2
 
 """
 
+import os
 import numpy as np
-import os,sys
 import pandas as pd
 import seaborn as sns
 
 import matplotlib.pylab as plt
-#plt.rc('font', weight='semibold')
 plt.rcParams['svg.fonttype'] = 'none'
 
 from scipy.stats import pearsonr, spearmanr 
@@ -83,7 +82,6 @@ def plot_scatters(ax, data_x, data_y,
     ax.tick_params(axis='x', labelsize= 7)
     ax.tick_params(axis='y', labelsize= 7)
     
-    # ax.legend(loc='upper left',frameon=True,edgecolor='none',handletextpad=0.3,handlelength=0.8, prop=dict(size=7), borderpad=0.05)
     ax.set_aspect(1./ax.get_data_ratio())
     
     return ax
@@ -145,23 +143,10 @@ td_vid2_feat3 = td_data_df['Heatcorr_vid2'].to_numpy()
 from matplotlib import colors
 from scipy.stats import rankdata
 
-cmap_asd = colors.LinearSegmentedColormap.from_list("", ['DarkRed', 'red', 'Crimson','IndianRed','Coral', 'Tomato', 
-                                                         'OrangeRed', 'SandyBrown',"orange", 'Gold', 'Goldenrod'])
-
 cmap_asd = colors.LinearSegmentedColormap.from_list("", ['DarkRed', '#db3926', 'SandyBrown', 'Gold',  'DarkOrange'])
-# cmap_asd = cm.get_cmap('autumn')
 
 cmap_td = colors.LinearSegmentedColormap.from_list("", ['MidnightBlue',"C0",'DeepSkyBlue','teal','Turquoise','cyan','C2'])
-# cmap_td = cm.get_cmap('winter')
 
-# # --- option 1 ---
-# norm_asd = colors.Normalize(vmin=asd_vid1.min(), vmax=asd_vid1.max())
-# asd_colors = [ cmap_asd(norm_asd(ii)) for ii in asd_vid1 ]
-
-# norm_td = colors.Normalize(vmin=td_vid1.min(), vmax=td_vid1.max())
-# td_colors = [ cmap_td(norm_td(ii)) for ii in td_vid1 ]
-
-# --- option 2 ---
 norm_asd = colors.Normalize(vmin=1, vmax=asd_vid1_feat1.size)
 asd_vid1_rank = rankdata(asd_vid1_feat1)
 asd_colors = [ cmap_asd(norm_asd(ii)) for ii in asd_vid1_rank ]
@@ -171,15 +156,9 @@ td_vid1_rank = rankdata(td_vid1_feat1)
 td_colors = [ cmap_td(norm_td(ii)) for ii in td_vid1_rank ]
 colorp = [ asd_colors, td_colors ]
 
-# To bypass giving colors. 
-# colorp = None
-
 markerp_asd = [ 'v' if sii.startswith('RA') else 'o' for sii in asd_subjs ]
 markerp_td = [ 'v' if sii.startswith('RA') else 'o' for sii in td_subjs ]
 markerp = [ markerp_asd, markerp_td ]
-
-# To bypass giving marker shapes. 
-# markerp = None
 
 
 #%% ----- Plotting starts here -----
@@ -258,8 +237,6 @@ plot_scatters(axes[3], td_vid1_feat1, td_vid2_feat1,
               xticks=xticks,yticks=yticks,
               add_text=add_text)
     
-    
-
 
 #%% 
 feat2_corr_asd = pearsonr(asd_vid1_feat2, asd_vid2_feat2 )
@@ -347,7 +324,6 @@ feat3_corrs_diff_s = np.load(os.path.join(resampleddata_dir,f'feat3_corrs_diff_{
 
 #%% Plotting
 
-# fig, axes = plt.subplots(nrows=2, ncols=1, figsize=(3,5),sharex=False,sharey=True)
 axes = axes_all[:,2].ravel()
 
 # Add vertical histograms:
@@ -374,8 +350,6 @@ bin_edges = np.linspace(hist_range[0], hist_range[1], nbins + 1) # or get direct
 centers = (bin_edges[:-1] + bin_edges[1:]) / 2.
 heights = np.diff(bin_edges)
 for c_loc, x_loc in enumerate(x_locs):
-    # axes[c_loc].barh(centers, binned_data_sets_face[c_loc],color=colors[c_loc], height=heights)#,left=x_loc)
-    # axes[c_loc].hist(data_sets_face[c_loc], bins=nbins, range=hist_range, orientation="horizontal");
     
     for ds_ii, (data_set,data_set_bin) in enumerate(zip([data_sets_feat0, data_sets_feat1, data_sets_feat2, data_sets_feat3],\
                                     [binned_data_sets_feat0, binned_data_sets_feat1, binned_data_sets_feat2, binned_data_sets_feat3])): 
@@ -417,7 +391,6 @@ for aii, ax in enumerate(axes):
 
 
 plt.subplots_adjust( hspace=0.5, wspace=0.6 )
-# plt.tight_layout()
 
 plt.savefig('CorrsStats_4feats_v1.png', dpi=300, bbox_inches='tight')
 plt.savefig('CorrsStats_4feats_v1.svg', format='svg')

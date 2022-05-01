@@ -8,7 +8,6 @@ Used for Figure 2 (C,F,I)
 """
 
 import os
-import sys
 import numpy as np
 import pandas as pd
 from tqdm import tqdm

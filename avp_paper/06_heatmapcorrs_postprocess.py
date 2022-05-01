@@ -8,7 +8,7 @@ Codes to generate the figures shown in the auism ET paper
 
 """
 
-import os, sys
+import os
 import numpy as np
 import pandas as pd
 
