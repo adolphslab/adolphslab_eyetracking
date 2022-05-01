@@ -32,12 +32,14 @@ hdf_output_dir = os.path.dirname(hdf_output_file)
 
 # if ET data contains very large number of subjects or very long tracking durations, 
 # it might be better to compress hdf file. 
-compress_hdf = False
+compress_hdf = True
 
 # While loading subject-wise data, control whether these parameters are consistent across subjects. 
 expected_resolution_vals_Cal = {'mov_height_w2':480, 'mov_width_w2':720, 'ScreenHeight_w1':1080, 'ScreenWidth_w1':1920, 'ScreenHeight_w2':900, 'ScreenWidth_w2': 1440}
 expected_resolution_vals_IU = {'mov_height_w2':480, 'mov_width_w2':720, 'ScreenHeight_w1':1080, 'ScreenWidth_w1':1920, 'ScreenHeight_w2':1440, 'ScreenWidth_w2': 2560}  
 
+if not os.path.exists(hdf_output_dir):
+    os.makedirs(hdf_output_dir)
 
 first_entry = True # to open an HDF file. 
 subj_folders = sorted(os.listdir(exp_folder))

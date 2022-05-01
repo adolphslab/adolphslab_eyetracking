@@ -33,6 +33,8 @@ hdf_output_dir = os.path.dirname(hdf_output_file)
 # But compressing/uncompressing is a slow process.
 compress_hdf = False
 
+if not os.path.exists(hdf_output_dir):
+    os.makedirs(hdf_output_dir)
 
 # Walk through subject-wise data folders. 
 subj_files = sorted(os.listdir(exp_folder))

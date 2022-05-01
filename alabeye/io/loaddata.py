@@ -10,6 +10,7 @@ from tqdm import tqdm
 
 from ..stats import nanmasked_mean
 
+import warnings
 
 # --- Load matlab .mat files ---
 # from: https://stackoverflow.com/a/8832212
@@ -142,16 +143,16 @@ def run_et_timebins(taskname, subjs, hdf_file, datakeys, timebin_msec,
 
         et_data_pd = pd.read_hdf(hdf_file, key2load, mode='r')
         
-        gaze_xy_init = et_data_pd[['GazeX','GazeY']].values
-        data_quality_dum_init = np.mean(gaze_xy_init,axis=1)
-
-        if rm_missingdata:
-            if ( np.isnan(data_quality_dum_init).sum() / len(data_quality_dum_init)) >= 0.5:
-                print(f'More than half of the data points are missing for {key2load}. Skipped!')
-                continue
+        # alternative missing data criteria on full data before downsampling to video frame rate. 
+        # gaze_xy_init = et_data_pd[['GazeX','GazeY']].values
+        # data_quality_dum_init = np.mean(gaze_xy_init,axis=1)
+        # if rm_missingdata:
+            # if ( np.isnan(data_quality_dum_init).sum() / len(data_quality_dum_init)) >= 0.5:
+                # print(f'\nMore than half of the data points are missing for {key2load}. Skipped!')
+                # continue
 
         # Apply timebins: to make this faster set use_maskedmean=False.
-        et_xy_binned = get_et_timebins(et_data_pd, timebin_msec, do_op=bin_operation, use_maskedmean=True, 
+        et_xy_binned = get_et_timebins(et_data_pd, timebin_msec, do_op=bin_operation, use_maskedmean=False, 
                                          fix_length=fix_length, nbins=nbins)
         
         if bin_operation in ['mean', 'maxrep']:
@@ -160,8 +161,8 @@ def run_et_timebins(taskname, subjs, hdf_file, datakeys, timebin_msec,
         
             if rm_missingdata:
                 data_quality_dum = np.mean(et_xy_binned,axis=1)
-                if ( np.isnan(data_quality_dum).sum() / len(data_quality_dum)) >= 0.5:
-                    print(f'More than half of the data points are missing for {key2load}. Skipped!')
+                if np.round( np.isnan(data_quality_dum).sum() / len(data_quality_dum), 1) >= 0.5:
+                    print(f'\nMore than half of the data points are missing for {key2load}. Skipped!')
                     continue
 
             if fix_length:
@@ -175,7 +176,7 @@ def run_et_timebins(taskname, subjs, hdf_file, datakeys, timebin_msec,
         else:
             et_xy.append([ bin_xy[:,[1,2]] for bin_xy in et_xy_binned])
 
-        subjs_used.append(sii) # if rm_subj_withhalfmissingdata=True, then some subjects will be removed.
+        subjs_used.append(sii) # if rm_missingdata=True, then some subjects will be removed.
 
         if split_groups:
             c_indx = subjs.index(sii) 
@@ -208,7 +209,6 @@ def run_et_timebins(taskname, subjs, hdf_file, datakeys, timebin_msec,
 
 
 
-
 def get_et_timebins(ET_data_pd, timebin_msec, do_op=None, use_maskedmean=True, data_unit='sec', 
                     fix_length=False, nbins=None, additional_column=None, fixation_info=None):
     #  do_op = 'mean' # None, 'mean' or 'maxrep'
@@ -220,11 +220,12 @@ def get_et_timebins(ET_data_pd, timebin_msec, do_op=None, use_maskedmean=True, d
     
     if timebin_msec < 10: raise ValueError('Binsize should be in msecs!')
     if data_unit == 's' or data_unit == 'sec':
-        if ET_data_pd['RecTime'].values[2] > 1.:  
-            print('\nBe sure that RecTime in the input is in secs (first data: %3.3f)!'%(ET_data_pd['RecTime'].values[2]))
+        # if ET_data_pd['RecTime'].values[2] > 1.:  
+            # print('\nBe sure that RecTime in the input is in secs (first data: %3.3f)!'%(ET_data_pd['RecTime'].values[2]))
         ET_rec_time = ET_data_pd['RecTime'].values*1000. # second to msec.
     elif data_unit == 'ms' or data_unit == 'msec': 
-        if ET_data_pd['RecTime'].values[2] < 1.:  print('\nBe sure that RecTime in the input is in msecs (first data: %3.3f)!'%(ET_data_pd['RecTime'].values[2])) 
+        if ET_data_pd['RecTime'].values[2] < 1.:  
+            print('\nBe sure that RecTime in the input is in msecs (first data: %3.3f)!'%(ET_data_pd['RecTime'].values[2])) 
         ET_rec_time = ET_data_pd['RecTime'].values # in msec.
     else:
         raise ValueError(f'Undefined data_unit: {data_unit}')
@@ -239,16 +240,21 @@ def get_et_timebins(ET_data_pd, timebin_msec, do_op=None, use_maskedmean=True, d
         ET_data4bin[ET_data4bin[:,-1] == -1, -1] = np.NaN 
         ET_data4bin[ET_data4bin[:,-1] == 0, -1] = np.NaN 
 
-    # 
+
     if fixation_info is not None:
         # print('Fixation info is used!')
         ET_data4bin[ fixation_info==0 ,1:] = np.NaN
 
+
     # use chunk indices to split data into bins/chunks. 
     ET_data4hp_bins = np.split(ET_data4bin,np.where(np.diff(ET_data4bin[:,0]))[0]+1)
     if do_op=='mean': 
-        if use_maskedmean: ET_data4hp_bins = [ nanmasked_mean(eii,axis=0) for eii in ET_data4hp_bins ]
-        else: ET_data4hp_bins = [ np.nanmean(eii,axis=0) for eii in ET_data4hp_bins ]
+        if use_maskedmean: 
+            ET_data4hp_bins = [ nanmasked_mean(eii,axis=0) for eii in ET_data4hp_bins ]
+        else:
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", category=RuntimeWarning)
+                ET_data4hp_bins = [ np.nanmean(eii,axis=0) for eii in ET_data4hp_bins ]
     elif do_op=='maxrep':
         ET_data4hp_bins_dum = []
         for sil, eii in enumerate(ET_data4hp_bins):
@@ -257,8 +263,8 @@ def get_et_timebins(ET_data_pd, timebin_msec, do_op=None, use_maskedmean=True, d
             else: 
                 unq_vals,unq_reps = np.unique(eii[~np.isnan(np.sum(eii,axis=1))],axis=0,return_counts=True) # sum+isnan to remove NaN data points. 
                 if len(unq_reps)>1: # if the unique elements have the same frequency take one of them. It is better than averaging. 
-                    #print sil, eii
-                    #print unq_vals[np.argmax(unq_reps)]
+                    #print( sil, eii)
+                    #print( unq_vals[np.argmax(unq_reps)])
                     ET_data4hp_bins_dum.append(unq_vals[np.argmax(unq_reps)])
                 else: ET_data4hp_bins_dum.append(unq_vals[0]) # There is only one unique array. 
         
@@ -329,5 +335,88 @@ def get_et_timebins(ET_data_pd, timebin_msec, do_op=None, use_maskedmean=True, d
 
 
     return ET_data4hp_bins_filled
+
+
+
+
+# Load SR Research ASC file
+def load_et_fromASC(asc_file):
+
+    gaze = []
+    saccs = []
+    fixes = []
+    blinks = []
+    with open(asc_file) as f:
+        for line in f:
+            if line[0].isdigit():
+                gaze_line = [i for i in line.split() if i != '...']
+                gaze.append(gaze_line)
+            elif line.startswith('ESACC'):
+                if len(line.split()) == 17:
+                    line_use = line.split()[:5] + line.split()[-6:]
+                elif len(line.split()) == 11:
+                    line_use = line.split()
+                else: raise ValueError('Problem in decoding EFIX!')
+                saccs.append(line_use)
+            elif line.startswith('EFIX'):
+                if len(line.split()) == 11:
+                    line_use = line.split()[:5] + line.split()[-3:]
+                elif len(line.split()) == 8:
+                    line_use = line.split()
+                else: raise ValueError('Problem in decoding EFIX!')
+                fixes.append(line_use)
+            elif line.startswith('EBLINK'):
+                blinks.append(line.split())
+            elif line.startswith('START'):
+                start_time = np.int64(line.split()[1])
+            elif line.startswith('END'):
+                end_time = np.int64(line.split()[1])
+            elif 'GAZE_COORDS' in line:
+                gaze_coords = [ np.float(gii) for gii in line.split()[-4:] ]
+            # elif 'start_movie' in line.lower():
+                # gaze_coords = line
+    
+    
+    gaze_cols = ['RecTime', 'GazeX', 'GazeY', 'Pupil_size']
+    # gaze_cols_dtype = [np.int64, np.float64, np.float64, np.int64]
+    gaze_df = pd.DataFrame(gaze, columns=gaze_cols)
+    gaze_df = gaze_df.apply(pd.to_numeric, errors='coerce')
+    gaze_df[['RecTime','Pupil_size']] = gaze_df[['RecTime','Pupil_size']].astype(np.int64) 
+    # gaze_df = gaze_df.round({'GazeX': 0, 'GazeY': 0})
+
+    
+    fixes_cols = ['Event', 'Eye', 'Start_time', 'End_time', 'Duration', 'FixationX', 'FixationY', 'Pupil_size_avg']
+    fixes_cols_dtype = [np.int64, str, np.int64, np.int64, np.int64, np.float64, np.float64, np.int64]
+    fixes_df = pd.DataFrame(fixes, columns=fixes_cols)
+    fixes_df['Event'] = 1
+    for col_ii, col_type in zip(fixes_cols,fixes_cols_dtype):
+        fixes_df[col_ii] = fixes_df[col_ii].astype(col_type)
+        
+    # round_cols = [ 'FixationX', 'FixationY' ]
+    # fixes_df[round_cols] = fixes_df[round_cols].round(0)
+    # fixes_df[round_cols] = fixes_df[round_cols].astype(np.int64) 
+    
+    saccs_cols = ['Event', 'Eye', 'Start_time', 'End_time', 'Duration', 'StartX', 'StartY', 'EndX', 'EndY', 'Ampl', 'Pupil_vel']
+    saccs_cols_dtype = [np.int64, str, np.int64, np.int64, np.int64, np.float64, np.float64, np.float64, np.float64, np.float64, np.int64]
+    saccs_df = pd.DataFrame(saccs, columns=saccs_cols)
+    saccs_df['Event'] = 2
+    saccs_df = saccs_df[ np.logical_and(saccs_df['StartX'] != '.' , saccs_df['EndX'] != '.' )]
+    
+    for col_ii, col_type in zip(saccs_cols,saccs_cols_dtype):
+        saccs_df[col_ii] = saccs_df[col_ii].astype(col_type)
+    
+    # round_cols = [ 'StartX', 'StartY', 'EndX', 'EndY' ]
+    # saccs_df[round_cols] = saccs_df[round_cols].round(0)
+    # saccs_df[round_cols] = saccs_df[round_cols].astype(np.int64) 
+    
+    
+    blinks_cols = ['Event', 'Eye', 'Start_time', 'End_time', 'Duration']
+    blinks_cols_dtype = [np.int64, str, np.int64, np.int64, np.int64 ]
+    blinks_df = pd.DataFrame(blinks, columns=blinks_cols)
+    blinks_df['Event'] = 0
+    for col_ii, col_type in zip(blinks_cols,blinks_cols_dtype):
+        blinks_df[col_ii] = blinks_df[col_ii].astype(col_type)
+
+    return start_time, end_time, gaze_df, fixes_df, saccs_df, blinks_df, gaze_coords
 
 

@@ -1,10 +1,11 @@
-name: eyetracking_env
+name: eyetracking
 channels:
   - conda-forge
   - defaults
 dependencies:
   - python=3.9
   - ipython
+  - pip
   - numpy
   - scipy
   - opencv
@@ -22,4 +23,6 @@ dependencies:
   - seaborn
   - av
   - pims
-  - pip
+  - pillow
+  - pingouin
+  - umap-learn

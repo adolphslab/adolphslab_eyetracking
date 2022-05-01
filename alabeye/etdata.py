@@ -9,7 +9,6 @@ import os
 import re
 import json
 import pickle
-import pims
 
 import numpy as np
 import pandas as pd
@@ -20,8 +19,29 @@ from .io.loaddata import get_subj_info, run_et_timebins
 from .stimulusdata import get_video_info
 from .viz import plot_gaze_basic, plot_compare_2groups
 
-
 implemented_tasktypes = ['video']
+
+
+def makedir(output_dir, warn=True, verbose=True, sysexit=False):
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+        if verbose: 
+            print(f'{output_dir} is ready.')
+        return True
+    else:
+        if sysexit:
+            raise SystemExit(f'\nThe folder {output_dir} already exists. Risk of overwriting files!'+
+                             "\nEnter another output_dir, allow overwriting with 'gendir(output_dir, sysexit=False)', "+
+                             "or delete 'output_dir' manually.\n")
+        if warn:
+            if verbose:
+                print(f'\nThe folder {output_dir} already exists. Risk of overwriting files!\n') 
+            return False
+        else:
+            if verbose:
+                print(f'\nThe folder {output_dir} already exists. Overwriting files!\n') 
+            return True
+
 
 class ETdata:
     """ETdata class provides an interface for loading and handling eye-tracking data. 
@@ -77,7 +97,9 @@ class ETdata:
                 print(f'Available tasks in data_file are: {vidclips!r}')
                 print(f"---> Entered taskname '{self.taskname}' is not in the list!")
             
+            self.hdf_allsubjs = subjs_all
             self.subjs = [ sii for sii in subjs_all if f'/{sii}/{self.taskname}' in datakeys ]
+            
             if subjs_group is None:
                 self.subjs_group = None
                 self.ngroups = None
@@ -94,9 +116,13 @@ class ETdata:
                 data2load = pickle.load(f)
             
             self.taskname = data2load['taskname']
+            self.available_tasks = data2load['taskname']
             self.data = data2load['et_data']
             self.data_subjs = data2load['subjs']
             self.data_subjs_group = data2load['group_info']
+            self.data_ngroups = len(data2load['group_info'])
+            assert self.data_ngroups == len(self.data)
+            assert self.data_ngroups == len(self.data_subjs)
             print(f"Loaded data for taskname: {self.taskname}")            
 
 
@@ -113,8 +139,8 @@ class ETdata:
         try:
             return self._stim_mediainfo
         except AttributeError:
-            raise SystemExit('stim_mediainfo has not been initialized yet! \n' + \
-                  "   Enter 'taskname' and 'stim_dir' in ETdata()!\n")
+            print('stim_mediainfo has not been initialized yet! \n' + \
+                  "   Enter 'taskname' and 'stim_dir' info while calling ETdata()!\n")
     
     # setter
     def _set_stim_mediainfo(self):
@@ -143,7 +169,7 @@ class ETdata:
     def load_rawdata(self, load_these_subjs=None, skip_these_subjs=[]):
         
         if self._load_hdf is False:
-            raise SystemExit("Please provide an hdf file as 'data_file' to load raw data!")
+            raise SystemExit("Please provide an hdf file as 'data_file' in ETdata() to load raw data!")
         
         if skip_these_subjs is None:
             skip_these_subjs = []
@@ -165,11 +191,11 @@ class ETdata:
             self.rawdata[sii] = et_data_pd
             
     
-    def load_timebinned_data(self, timebin_msec='frame_duration', 
-                             load_these_subjs=None, skip_subjs=[], split_groups=False, 
-                             save_output=False, output_dir=None,
-                             rm_subj_withhalfmissingdata=False, bin_operation='mean',
-                             fix_length=False, nbins=None):
+    def get_timebinned_data(self, timebin_msec='frame_duration', 
+                            load_these_subjs=None, skip_subjs=[], split_groups=False, 
+                            save_output=False, output_dir=None, output_overwrite=True,
+                            rm_subj_withhalfmissingdata=False, bin_operation='mean',
+                            fix_length=False, nbins=None):
         
         if self._load_hdf is False:
             raise SystemExit("Please provide an hdf file as 'data_file' to load raw data!")
@@ -182,9 +208,15 @@ class ETdata:
             raise SystemExit("Please provide a directory location 'output_dir' to save time binned data!")
         
         if save_output:
-            if not os.path.exists(output_dir):
-                os.makedirs(output_dir)
-
+            if output_overwrite:
+                gen_success = makedir(output_dir,warn=False,verbose=False)
+                assert gen_success
+            else:
+                gen_success = makedir(output_dir,warn=True,verbose=True)
+                if not gen_success:
+                    raise SystemExit("Enter another 'output_dir', delete 'output_dir' manually,"+
+                                     " or set 'output_overwrite=True'")
+                    
             pickle_file = os.path.join(output_dir,f'timebinned_data_{self.taskname}.pkl')
             if os.path.isfile(pickle_file):
                 raise SystemExit(f"Overwriting pickle file: {pickle_file}" + 
@@ -259,6 +291,4 @@ class ETdata:
                              colors=colors, zorder=zorder,
                              save_viz=save_viz, output_dir=output_dir, 
                              show_viz=show_viz, prep_viz=prep_viz)
-
-
 

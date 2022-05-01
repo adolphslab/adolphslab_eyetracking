@@ -8,7 +8,7 @@ Eye tracking data analysis tools used in the Adolphs Lab.
 clone/download and installation
 ===============================
 
-suggested way: clone the repository, set up a conda environment, and install develpment version in editable mode via:
+suggested way: clone the repository, set up a conda environment, and install the development version in editable mode via:
 
 .. code-block:: bash
 
@@ -19,7 +19,7 @@ suggested way: clone the repository, set up a conda environment, and install dev
     pip install -e .
     
 
-alternatively, pip installation -- but dependencies would be problematic:
+alternatively, pip installation -- but some dependencies could be problematic:
 
 .. code-block:: bash
 

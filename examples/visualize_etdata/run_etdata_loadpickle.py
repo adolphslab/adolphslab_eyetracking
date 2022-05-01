@@ -22,7 +22,7 @@ pickle_input_dir = os.path.join(root_dir,'ETdata','down2frame_data')
 pickle_file = '/home/umit/Documents/Research_ET/AutismVids/avp_data/ETdata/down2frame_data/timebinned_data_Ep1_Clip1.pkl'
 
 # Just to load data. 
-# etdata_video = ETdata(data_file=pickle_file)
+etdata_video = ETdata(data_file=pickle_file)
 
 # Load data and stimulus video media info, such as fps, the number of frames, etc.
 etdata_video = ETdata(data_file=pickle_file, stim_dir=stim_dir)
@@ -31,10 +31,16 @@ etdata_video = ETdata(data_file=pickle_file, stim_dir=stim_dir)
 output_dir = '/home/umit/Documents/Research_ET/AutismVids/sample_viz'
 
 
-# etdata_video.visualize_gaze(merge_groups=False,show_viz=True,
-                           # save_viz=True,output_dir=output_dir)
+# etdata_video.visualize_gaze(merge_groups=True,show_viz=True)
 
-# etdata_video.visualize_2groups(show_viz=True,
-                               # save_viz=True,output_dir=output_dir)
+# etdata_video.visualize_gaze(merge_groups=False,show_viz=True,
+                            # save_viz=True,output_dir=output_dir)
+
+
+# etdata_video.visualize_2groups(prep_viz=True)
+
+
+etdata_video.visualize_2groups(show_viz=True,
+                                save_viz=True,output_dir=output_dir)
 
     
