@@ -66,15 +66,16 @@ def cross_correlation(A, B, axis=1): # default rows
 def cohen_d(x,y,rm_nan=False):
     # Computes Cohen's d for two arrays.
     if rm_nan:
-        x = np.array(x)
-        y = np.array(y)
+        x = np.array(x, copy=True)
+        y = np.array(y, copy=True)
         x = x[~np.isnan(x)]
         y = y[~np.isnan(y)]
 
     nx, ny = len(x) , len(y)
     dof = nx + ny - 2.
     
-    return (np.mean(x) - np.mean(y)) / np.sqrt( ( (nx-1)*(np.std(x, ddof=1)**2.) + (ny-1)*(np.std(y, ddof=1)**2.) ) / dof)
+    return (np.mean(x) - np.mean(y)) / np.sqrt( ((nx-1)*(np.std(x, ddof=1)**2.) + 
+                                                 (ny-1)*(np.std(y, ddof=1)**2.) ) / dof)
 
 
 
@@ -88,7 +89,7 @@ def hedge_g(x,y):
 
 
 
-def cohen_d_mat(x2d,y2d,rm_extreme=False):
+def cohen_d_mat(x2d, y2d, rm_extreme=False, n_std=4):
     # Computes Cohen's d for each column separately.
     if x2d.shape[1] != y2d.shape[1]: 
         raise SystemExit("Array dims mismatch in computing Cohen's d")
@@ -102,8 +103,7 @@ def cohen_d_mat(x2d,y2d,rm_extreme=False):
         
         x2d_temp = np.nan_to_num(x2d)
         y2d_temp = np.nan_to_num(y2d)
-
-        n_std=4.
+        
         x_out = np.logical_or( x2d_temp >= (col_mean + n_std*col_std), x2d_temp <= (col_mean - n_std*col_std) )
         y_out = np.logical_or( y2d_temp >= (col_mean + n_std*col_std), y2d_temp <= (col_mean - n_std*col_std) )
         
@@ -126,15 +126,15 @@ def cohen_d_mat(x2d,y2d,rm_extreme=False):
 
 def cohen_d_mat_z(x2d,y2d):
     # Computes Cohen's d for each column separately after Fisher-z transformation.
-    if x2d.shape[1] != y2d.shape[1]: raise SystemExit("Problem in computing Cohen's d")
+    assert x2d.shape[1] == y2d.shape[1], "Problem in computing Cohen's d"
 
     nx_cols = np.sum(~np.isnan(x2d),axis=0).astype(float)
     ny_cols = np.sum(~np.isnan(y2d),axis=0).astype(float)
     dof = nx_cols + ny_cols - 2.
 
     x2d_z, y2d_z = x2d.copy(), y2d.copy()
-    x2d_z[x2d_z==1] = 0.99999 # Against an error in arctanh. 
-    y2d_z[y2d_z==1] = 0.99999 # Against an error in arctanh. 
+    x2d_z[x2d_z==1] = 1 - 1e-16 # Against an error in arctanh. 
+    y2d_z[y2d_z==1] = 1 - 1e-16 # Against an error in arctanh. 
 
     x2d_z, y2d_z = np.arctanh(x2d_z), np.arctanh(y2d_z)
 
@@ -149,7 +149,8 @@ def cohen_d_mat_z(x2d,y2d):
 
 def hedges_g_mat_z(x2d,y2d):
     # Computes Hedges's g for each column separately.
-    if x2d.shape[1] != y2d.shape[1]: raise SystemExit("Problem in computing Hedges's g")
+    assert x2d.shape[1] == y2d.shape[1], "Problem in computing Hedges's g"
+    
     hedges_vals = [] 
     for col_ii in range(x2d.shape[1]):
         x = x2d[:,col_ii].copy()
@@ -158,8 +159,8 @@ def hedges_g_mat_z(x2d,y2d):
         x = x[~np.isnan(x)]
         y = y[~np.isnan(y)]
         
-        x[x==1] = 0.99999
-        y[y==1] = 0.99999
+        x[x==1] = 1 - 1e-16
+        y[y==1] = 1 - 1e-16
         
         x, y = np.arctanh(x), np.arctanh(y)
         
@@ -174,7 +175,7 @@ def hedges_g_mat_z(x2d,y2d):
 
 
 
-def rm_outlier(arr_1,arr_2,n_std=4,return_mask=False):
+def rm_outlier(arr_1,arr_2,n_std=4.,return_mask=False):
     # arr_1 and arr_2: 1D arrays. 
     arr_comb = np.r_[arr_1,arr_2]
     x_out = outlier_std(arr_comb,n_std=n_std)
@@ -188,12 +189,12 @@ def rm_outlier(arr_1,arr_2,n_std=4,return_mask=False):
 
 
 
-
-
-def cohen_d_ci(x,y, confidence=.95, n_boot=20000, method='per', decimals=3, return_dist=False, 
-               tail='two-sided', rm_nan=False, rm_extreme=False):
-    # confidence=.68 for std.
+def cohen_d_ci(x,y, confidence=.95, n_boot=20000, n_sample=None,
+               method='per', decimals=3, 
+               return_dist=False, tail='two-sided', rm_nan=False, 
+               rm_extreme=False, r2z_xform=False):
     
+    # confidence=.68 for std.
     # x, y: 1d array.
     # confidence = 0.95
     # default percentile CI to make it consistent with p-value. 
@@ -201,13 +202,18 @@ def cohen_d_ci(x,y, confidence=.95, n_boot=20000, method='per', decimals=3, retu
     x = np.array(x, copy=True)
     y = np.array(y, copy=True)
 
+    if r2z_xform:
+        x[x==1] = 1.0 - 1e-16
+        y[y==1] = 1.0 - 1e-16
+        x = np.arctanh(x)
+        y = np.arctanh(y)
+
     if rm_nan:
         x = x[~np.isnan(x)]
         y = y[~np.isnan(y)]
 
-    
     if rm_extreme:
-        x, y, x_out_mask, y_out_mask = rm_outlier(x,y,n_std=4,return_mask=True)
+        x, y, x_out_mask, y_out_mask = rm_outlier(x,y,n_std=3.,return_mask=True)
         if np.any(np.r_[x_out_mask,y_out_mask]): 
             print('removed x: %d, y: %d'%(sum(x_out_mask),sum(y_out_mask)))
     
@@ -219,18 +225,26 @@ def cohen_d_ci(x,y, confidence=.95, n_boot=20000, method='per', decimals=3, retu
     assert y.ndim == 1
     assert n_y > 1
 
-    assert (n_x >= 15 and n_y >= 15), 'Not enough sample size for computation: n_x: %d, n_y: %d '%(n_x,n_y)
+    assert (n_x >= 15 and n_y >= 15), \
+        'Not enough sample size for computation: n_x: %d, n_y: %d '%(n_x,n_y)
 
     assert isinstance(confidence, float)
     assert 0 < confidence < 1
     if not method in ['normal', 'percentile', 'per', 'cper', 'bca' ]:
         raise ValueError('Undefined method in cohen_d_CI!')
 
+    if n_sample is not None:
+        n_sample_x = n_sample
+        n_sample_y = n_sample
+    else:
+        n_sample_x = n_x
+        n_sample_y = n_y
+        
 
-    inds_x = np.random.randint(n_x, size=(n_x,n_boot))
-    inds_y = np.random.randint(n_y, size=(n_y,n_boot))
-    # inds_x = np.random.choice(n_x, size=(n_x,n_boot),replace=True)          
-    # inds_y = np.random.choice(n_y, size=(n_y,n_boot),replace=True)          
+    inds_x = np.random.randint(n_x, size=(n_sample_x,n_boot))
+    inds_y = np.random.randint(n_y, size=(n_sample_y,n_boot))
+    # inds_x = np.random.choice(n_x, size=(n_sample_x,n_boot),replace=True)      
+    # inds_y = np.random.choice(n_y, size=(n_sample_y,n_boot),replace=True)      
     
     x_sample = x[inds_x]
     y_sample = y[inds_y]
@@ -272,12 +286,44 @@ def cohen_d_ci(x,y, confidence=.95, n_boot=20000, method='per', decimals=3, retu
 
     ci = np.round(ci, decimals)
     # Compute bootstrap p-value.
-    pval = (np.sum(bootstat<=0.)+1.)/float(len(bootstat)+1.) if np.mean(bootstat)>=0 else (np.sum(bootstat>=0.)+1.)/float(len(bootstat)+1.)
+    # pval = (np.sum(bootstat<=0.)+1.)/float(len(bootstat)+1.) if np.mean(bootstat)>=0 \
+        # else (np.sum(bootstat>=0.)+1.)/float(len(bootstat)+1.)
+    
+    pval = (np.sum(bootstat<=0.)+1.)/float(len(bootstat)+1.) if reference>=0 \
+        else (np.sum(bootstat>=0.)+1.)/float(len(bootstat)+1.)
+    
     if tail == 'two-sided':
         pval = pval*2.
-
+        
     if return_dist:
-        return reference, np.mean(bootstat), ci[0], ci[1], pval, bootstat
+        return reference.round(3), np.mean(bootstat).round(3), \
+            [ ci[0].round(3), ci[1].round(3)], pval.round(6), bootstat
     else:
-        return reference, np.mean(bootstat), ci[0], ci[1], pval
+        return reference.round(3), np.mean(bootstat).round(3), \
+            [ ci[0].round(3), ci[1].round(3)], pval.round(6)
+
+
+
+#%% Bootstrap p-value
+get_bootstrappval = lambda x: ( (np.sum(x<=0)+1.)/float(len(x)+1.) if np.mean(x)>0 \
+                             else (np.sum(x>=0)+1.)/float(len(x)+1.) ) * 2. # two-sided.
+
+get_bootstrappval_1sided = lambda x: ( (np.sum(x<=0)+1.)/float(len(x)+1.) if np.mean(x)>0 \
+                             else (np.sum(x>=0)+1.)/float(len(x)+1.) )
+    
+    
+def get_bootstrappval_altv(x):
+    x = np.array(x)
+    if np.mean(x) >=0:
+        p_1 = (np.sum(x<=0)+1.)/float(len(x)+1.)
+        p_2 = (np.sum(x>0)+1.)/float(len(x)+1.)
+
+        return 2.*np.min([p_1,p_2])
+
+    else:
+        p_1 = (np.sum(x<0)+1.)/float(len(x)+1.)
+        p_2 = (np.sum(x>=0)+1.)/float(len(x)+1.)
+        return 2.*np.min([p_1,p_2])
+
+
 

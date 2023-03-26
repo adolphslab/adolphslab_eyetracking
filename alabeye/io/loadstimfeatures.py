@@ -229,24 +229,25 @@ def get_talk_areas(frame_results_,frame_height,frame_width):
 
 
 
-
 # used in fixation analyses for RetinaFace detections. 
-def sort_facedetect_by_salience(this_frame_results,scan_areas,frame_height,frame_width):
+def sort_facedetect_by_salience(this_frame_results,scan_area_Ctrl,frame_height,frame_width):
     n_subjs = []
     for hii in this_frame_results:
         face_areas = np.zeros((frame_height,frame_width)).astype(bool)
-        b = hii.astype(int)
-        b[b<0] = 0
+
+        b = np.maximum(hii.astype(int), 0)
         face_areas[b[1]:b[3],b[0]:b[2]] = True
         
-        n_subjs.append( sum( np.logical_and(sii,face_areas).any() for sii in scan_areas if sii is not None ) )
+        n_subjs.append( sum( np.logical_and(sii,face_areas).any() for sii in scan_area_Ctrl if (not sii is None) ) )
         
     this_frame_results = this_frame_results[np.argsort(n_subjs)[::-1]] # most salient to less. 
     return this_frame_results
 
 
-def get_faceareas_simple(this_frame_results,frame_height,frame_width,detection_thrs=0.5,\
-                         sort_by_area=False,return_corners=False,return_landmarks_full=False):
+
+def get_faceareas_simple(this_frame_results, frame_height, frame_width,
+                         detection_thrs=0.5, sort_by_area=False,
+                         return_corners=False, return_landmarks_full=False):
 
     # sort faces based on face size, rather than prediction probability.
     if sort_by_area:
@@ -256,14 +257,16 @@ def get_faceareas_simple(this_frame_results,frame_height,frame_width,detection_t
         this_frame_results = this_frame_results[np.argsort(areas_)[::-1]]
     
     face_areas = np.zeros((frame_height,frame_width))
+
+    if return_corners:
+        corners = []
     
     face_num = 1
     landmarks_all = []
-    corners = []
     for hii in this_frame_results:
         if hii[4] > detection_thrs:
-            b = hii.astype(int)
-            b[b<0] = 0
+            
+            b = np.maximum(hii.astype(int), 0)
             if b[2]>frame_width: b[2] = frame_width-1 
             if b[3]>frame_height: b[3] = frame_height-1
             
@@ -275,11 +278,8 @@ def get_faceareas_simple(this_frame_results,frame_height,frame_width,detection_t
             # b9,b10: nose; b11,b12: left-side mouth; b13,b14: right-side mouth
             
             # control for out of frame detections. 
-            lm_w = landmarks[:,0] >= frame_width
-            if lm_w.any(): landmarks[lm_w,0] = frame_width-1
-            
-            lm_h = landmarks[:,1] >= frame_height
-            if lm_h.any(): landmarks[lm_h,1] = frame_height-1
+            landmarks[:, 0] = np.minimum(landmarks[:, 0], frame_width - 1)
+            landmarks[:, 1] = np.minimum(landmarks[:, 1], frame_height - 1)
             
             assert landmarks.shape[0]==5
             # center_of_eyes = np.mean(landmarks[[0,1],:],axis=0).round().astype(int)
@@ -288,9 +288,10 @@ def get_faceareas_simple(this_frame_results,frame_height,frame_width,detection_t
             if return_landmarks_full:
                 landmarks_all.append(np.vstack((landmarks)))
             else:
-                landmarks_all.append(np.vstack((landmarks[:-2,:],mouth_center)))
-        
-            corners.append(b[0:4])
+                landmarks_all.append(np.vstack((landmarks[:-2,:], mouth_center)))
+
+            if return_corners:
+                corners.append(b[0:4])
     
     if return_corners:
         return face_areas, landmarks_all, corners
@@ -299,76 +300,103 @@ def get_faceareas_simple(this_frame_results,frame_height,frame_width,detection_t
 
 
 
-# used in fixation analyses for RetinaFace detections. 
-def get_faceareas(this_frame_results,frame_height,frame_width,detection_thrs=0.5):
 
-    face_areas = np.zeros((frame_height,frame_width))
-    face_areas_med = np.zeros((frame_height,frame_width))
-    face_areas_small = np.zeros((frame_height,frame_width))
-    face_areas_eyes = np.zeros((frame_height,frame_width))
-    face_areas_mouth = np.zeros((frame_height,frame_width))
+# used in fixation analyses for RetinaFace detections. 
+def get_faceareas(this_frame_results, frame_height, frame_width, detection_thrs=0.5):
+
+    face_areas = np.zeros((frame_height,frame_width),dtype=bool)
+    face_areas_eyes = np.zeros((frame_height,frame_width),dtype=bool)
+    face_areas_mouth = np.zeros((frame_height,frame_width),dtype=bool)
     
     for hii in this_frame_results:
-        face_areas_small_dum = np.zeros((frame_height,frame_width))
-        face_areas_small_dum1 = np.zeros((frame_height,frame_width))
-        face_areas_small_dum2 = np.zeros((frame_height,frame_width))
         if hii[4] > detection_thrs:
-            b = hii.astype(int)
-            b[b<0] = 0
-            face_areas[b[1]:b[3],b[0]:b[2]] = 1
-            box1 = b[:4]
+            
+            b = np.maximum(hii.astype(int), 0)
+            
+            face_areas[b[1]:b[3],b[0]:b[2]] = True
             
             landmarks = b[5:].reshape(-1,2)
             #from viewers perspective: b5,b6: left eye; b7,b8: right eye;  
             # b9,b10: nose; b11,b12: left-side mouth; b13,b14: right-side mouth
             
             # control for out of frame detections. 
-            lm_w = landmarks[:,0] >= frame_width
-            if lm_w.any(): landmarks[lm_w,0] = frame_width-1
+            landmarks[:, 0] = np.minimum(landmarks[:, 0], frame_width - 1)
+            landmarks[:, 1] = np.minimum(landmarks[:, 1], frame_height - 1)
             
-            lm_h = landmarks[:,1] >= frame_height
-            if lm_h.any(): landmarks[lm_h,1] = frame_height-1
-            
-            for land_ii in landmarks:
-                face_areas_small_dum[land_ii[1],land_ii[0]] = 1                    
-                    
-            chull = convex_hull_image(face_areas_small_dum)
-            box2 = get_boundingbox(chull)
-            box2[box2<0] = 0
-            face_areas_small[ chull>0 ] = chull[ chull>0 ].copy()
+            box2 = [ np.min(landmarks[:,0]), np.min(landmarks[:,1]), 
+                     np.max(landmarks[:,0]), np.max(landmarks[:,1]) ] 
 
-            med_box = np.vstack((box1,box2)).mean(0).astype(int).reshape(-1,2)
-            # control for out of frame detections. 
-            lm_w = med_box[:,0] >= frame_width
-            if lm_w.any(): med_box[lm_w,0] = frame_width-1
+            med_box = np.vstack((b[:4],box2)).mean(0).astype(int).reshape(-1,2)
             
-            lm_h = med_box[:,1] >= frame_height
-            if lm_h.any(): med_box[lm_h,1] = frame_height-1            
-            
+            # Control for out of frame detections.
+            med_box[:, 0] = np.minimum(med_box[:, 0], frame_width - 1)
+            med_box[:, 1] = np.minimum(med_box[:, 1], frame_height - 1)
             med_box = med_box.flatten()
-            face_areas_med[med_box[1]:med_box[3],med_box[0]:med_box[2]] = 1
 
-            # --- Following 2 parts will fail for non-vertical faces, but a good approximation for the Office videos. ---
+            # --- Following 2 parts will fail for non-vertical faces, 
+            # but a good approximation for the Office videos. ---
             # upper - eye - 
-            face_areas_small_dum1[med_box[1],med_box[0]] = 1          
-            face_areas_small_dum1[med_box[1],med_box[2]] = 1          
-            face_areas_small_dum1[landmarks[2,1],landmarks[2,0]] = 1 # nose          
-            chull1 = convex_hull_image(face_areas_small_dum1)
-            box_11 = get_boundingbox(chull1)
-            box_11[box_11<0] = 0
-            face_areas_eyes[box_11[1]:box_11[3],box_11[0]:box_11[2]] = 1
+            box_11 = [np.min([ med_box[0], med_box[2], landmarks[2,0] ]), np.min([med_box[1], landmarks[2,1]]), 
+                      np.max([ med_box[0], med_box[2], landmarks[2,0] ]), np.max([med_box[1], landmarks[2,1]]) ]
+            box_11 = np.maximum(box_11, 0)
+            face_areas_eyes[box_11[1]:box_11[3],box_11[0]:box_11[2]] = True
 
             # lower - mouth - 
-            face_areas_small_dum2[med_box[3],med_box[0]] = 1          
-            face_areas_small_dum2[med_box[3],med_box[2]] = 1
-            face_areas_small_dum2[landmarks[2,1],landmarks[2,0]] = 1 # nose          
-            chull2 = convex_hull_image(face_areas_small_dum2)
-            box_22 = get_boundingbox(chull2)
-            box_22[box_22<0] = 0
-            face_areas_mouth[box_22[1]:box_22[3],box_22[0]:box_22[2]] = 1
+            box_22 = [np.min([ med_box[0], med_box[2], landmarks[2,0] ]), np.min([med_box[3], landmarks[2,1]]), 
+                      np.max([ med_box[0], med_box[2], landmarks[2,0] ]), np.max([med_box[3], landmarks[2,1]]) ]
+            box_22 = np.maximum(box_22, 0)
+            face_areas_mouth[box_22[1]:box_22[3],box_22[0]:box_22[2]] = True
+
+    return face_areas, face_areas_eyes, face_areas_mouth
+
+
+
+# used in fixation analyses for RetinaFace detections. 
+def get_faceareas_boxes(this_frame_results, frame_height, frame_width, detection_thrs=0.5):
+
+    face_boxes = []
+    face_boxes_eyes = []
+    face_boxes_mouth = []
+    
+    for hii in this_frame_results:
+        if hii[4] > detection_thrs:
             
-        
-    return face_areas.astype(bool), face_areas_med.astype(bool), face_areas_small.astype(bool), \
-        face_areas_eyes.astype(bool), face_areas_mouth.astype(bool)
+            b = np.maximum(hii.astype(int), 0)
+            
+            face_boxes.append( [b[1], b[3], b[0], b[2]] )
+            
+            landmarks = b[5:].reshape(-1,2)
+            #from viewers perspective: b5,b6: left eye; b7,b8: right eye;  
+            # b9,b10: nose; b11,b12: left-side mouth; b13,b14: right-side mouth
+            
+            # control for out of frame detections. 
+            landmarks[:, 0] = np.minimum(landmarks[:, 0], frame_width - 1)
+            landmarks[:, 1] = np.minimum(landmarks[:, 1], frame_height - 1)
+            
+            box2 = [ np.min(landmarks[:,0]), np.min(landmarks[:,1]), 
+                     np.max(landmarks[:,0]), np.max(landmarks[:,1]) ] 
+
+            med_box = np.vstack((b[:4],box2)).mean(0).astype(int).reshape(-1,2)
+            
+            # Control for out of frame detections.
+            med_box[:, 0] = np.minimum(med_box[:, 0], frame_width - 1)
+            med_box[:, 1] = np.minimum(med_box[:, 1], frame_height - 1)
+            med_box = med_box.flatten()
+
+            # --- Following 2 parts will fail for non-vertical faces, 
+            # but a good approximation for the Office videos. ---
+            # upper - eye - 
+            box_11 = [np.min([ med_box[0], med_box[2], landmarks[2,0] ]), np.min([med_box[1], landmarks[2,1]]), 
+                      np.max([ med_box[0], med_box[2], landmarks[2,0] ]), np.max([med_box[1], landmarks[2,1]]) ]
+            box_11 = np.maximum(box_11, 0)
+            face_boxes_eyes.append([box_11[1], box_11[3], box_11[0], box_11[2]] )
+            
+            # lower - mouth - 
+            box_22 = [np.min([ med_box[0], med_box[2], landmarks[2,0] ]), np.min([med_box[3], landmarks[2,1]]), 
+                      np.max([ med_box[0], med_box[2], landmarks[2,0] ]), np.max([med_box[3], landmarks[2,1]]) ]
+            box_22 = np.maximum(box_22, 0)
+            face_boxes_mouth.append([box_22[1], box_22[3], box_22[0], box_22[2]] )
+            
+    return face_boxes, face_boxes_eyes, face_boxes_mouth
 
 

@@ -48,6 +48,8 @@ def _todict(matobj):
             dict[strg] = elem
     return dict
 
+
+
 def items_to_arrays(hdf_group,keys_load=None):
     arrays = {}
     for keys, vals in hdf_group.items():
@@ -56,7 +58,6 @@ def items_to_arrays(hdf_group,keys_load=None):
                 arrays[keys] = np.array(vals)
         else:
             arrays[keys] = np.array(vals)
-
     return arrays
 
 
@@ -85,8 +86,7 @@ def get_subj_info(hdf_file, subj_info_file=None, use_subj_info=False, use_subjs_
     subjs = [ dii.split('/')[1]  for dii in datakeys]
     vidclips = [ dii.split('/')[2]  for dii in datakeys]
 
-    if len(subjs) != len(vidclips): 
-        raise SystemExit('Problem while reading subjects and video clips information!')
+    assert len(subjs) == len(vidclips) 
     
     subjs = np.unique(subjs).tolist()
     vidclips = np.unique(vidclips).tolist()
@@ -107,7 +107,7 @@ def get_subj_info(hdf_file, subj_info_file=None, use_subj_info=False, use_subjs_
     if use_subj_info:
         subj_info_pd = pd.read_csv(subj_info_file)
         subj_IDs_csv = subj_info_pd['ID'].values.tolist()
-        subj_group_csv = subj_info_pd['Group'].values.astype(int)
+        subj_group_csv = subj_info_pd['Group'].values#.astype(int)
     
         subj_csv = []
         subj_csv_group = []
@@ -122,7 +122,7 @@ def get_subj_info(hdf_file, subj_info_file=None, use_subj_info=False, use_subjs_
 
 
 
-def run_et_timebins(taskname, subjs, hdf_file, datakeys, timebin_msec, 
+def run_et_timebins(taskname, subjs, hdf_file, datakeys, timebin_sec, 
                     rm_missingdata, bin_operation='mean',
                     split_groups = False, subjs_group=None,
                     fix_length=False, nbins=None):
@@ -151,17 +151,20 @@ def run_et_timebins(taskname, subjs, hdf_file, datakeys, timebin_msec,
                 # print(f'\nMore than half of the data points are missing for {key2load}. Skipped!')
                 # continue
 
-        # Apply timebins: to make this faster set use_maskedmean=False.
-        et_xy_binned = get_et_timebins(et_data_pd, timebin_msec, do_op=bin_operation, use_maskedmean=False, 
-                                         fix_length=fix_length, nbins=nbins)
+        # Apply timebins
+        et_xy_binned = get_et_timebins(et_data_pd, timebin_sec, do_op=bin_operation, use_maskedmean=False, 
+                                         fix_length=fix_length, nbins=nbins,
+                                         keep_timebin_index=False, 
+                                         # additional_column='RecTime',
+                                         )
         
         if bin_operation in ['mean', 'maxrep']:
             et_xy_binned = np.vstack(et_xy_binned) # used to assess whether more than half of data points are missing.
-            assert all(np.diff(et_xy_binned[:,0]) == 1), 'Some frames are missing! Need to fix this!'
-        
+            
             if rm_missingdata:
-                data_quality_dum = np.mean(et_xy_binned,axis=1)
-                if np.round( np.isnan(data_quality_dum).sum() / len(data_quality_dum), 1) >= 0.5:
+                # The ratio of missing data in each subject
+                data_quality_dum = np.isnan(et_xy_binned).any(axis=1)
+                if np.round( data_quality_dum.sum() / len(data_quality_dum), 1) >= 0.5: 
                     print(f'\nMore than half of the data points are missing for {key2load}. Skipped!')
                     continue
 
@@ -171,10 +174,9 @@ def run_et_timebins(taskname, subjs, hdf_file, datakeys, timebin_msec,
                 else:
                     assert ntimebins_use == len(et_xy_binned), 'ntimebins_use should not change across subjects if fix_length=True!'
 
-        # 
-            et_xy.append(et_xy_binned[:,[1,2]])
+            et_xy.append(et_xy_binned)
         else:
-            et_xy.append([ bin_xy[:,[1,2]] for bin_xy in et_xy_binned])
+            et_xy.append([ bin_xy for bin_xy in et_xy_binned])
 
         subjs_used.append(sii) # if rm_missingdata=True, then some subjects will be removed.
 
@@ -209,36 +211,33 @@ def run_et_timebins(taskname, subjs, hdf_file, datakeys, timebin_msec,
 
 
 
-def get_et_timebins(ET_data_pd, timebin_msec, do_op=None, use_maskedmean=True, data_unit='sec', 
-                    fix_length=False, nbins=None, additional_column=None, fixation_info=None):
-    #  do_op = 'mean' # None, 'mean' or 'maxrep'
+def get_et_timebins(ET_data_pd, timebin_sec, do_op=None,
+                    fix_length=False, nbins=None, additional_column=None, 
+                    keep_timebin_index=True, etdata_colnames=['GazeX','GazeY'],
+                    fixation_info=None, use_maskedmean=False # These are not used any more in analyses indeed.  
+                    ):
     
     assert do_op in ['mean', 'maxrep', None], "do_op should be one of these: ['mean', 'maxrep', None]"
     
     if fix_length and nbins is None:
         raise SystemExit("if fix_length=True, then should enter 'nbins'!")
     
-    if timebin_msec < 10: raise ValueError('Binsize should be in msecs!')
-    if data_unit == 's' or data_unit == 'sec':
-        # if ET_data_pd['RecTime'].values[2] > 1.:  
-            # print('\nBe sure that RecTime in the input is in secs (first data: %3.3f)!'%(ET_data_pd['RecTime'].values[2]))
-        ET_rec_time = ET_data_pd['RecTime'].values*1000. # second to msec.
-    elif data_unit == 'ms' or data_unit == 'msec': 
-        if ET_data_pd['RecTime'].values[2] < 1.:  
-            print('\nBe sure that RecTime in the input is in msecs (first data: %3.3f)!'%(ET_data_pd['RecTime'].values[2])) 
-        ET_rec_time = ET_data_pd['RecTime'].values # in msec.
-    else:
-        raise ValueError(f'Undefined data_unit: {data_unit}')
+    if timebin_sec > 10: 
+        print('In the current version binsize should be in secs!' +\
+              'Please be sure that your binsize is in seconds!')
+            
+    ET_rec_time = ET_data_pd['RecTime'].values 
 
     # needed to split ET_data into chunks/bins of duration of a frame (in heatmap calculations this was binsize).
-    chunks = (ET_rec_time//timebin_msec + 1).astype(int) # same as np.asarray([ np.divmod(ii,binsize)[0]+1 for ii in ET_rec_time ])
+    chunks = (ET_rec_time//timebin_sec + 1).astype(int) # same as np.asarray([ np.divmod(ii,binsize)[0]+1 for ii in ET_rec_time ])
     if additional_column is None:
-        ET_data4bin = np.hstack(( chunks.reshape(-1,1), ET_data_pd[['GazeX','GazeY']].values ))
+        ET_data4bin = np.hstack(( chunks.reshape(-1,1), ET_data_pd[etdata_colnames].values ))
     else:
-        # to take care of pupil diameter.
-        ET_data4bin = np.hstack(( chunks.reshape(-1,1), ET_data_pd[['GazeX','GazeY', additional_column]].values ))
-        ET_data4bin[ET_data4bin[:,-1] == -1, -1] = np.NaN 
-        ET_data4bin[ET_data4bin[:,-1] == 0, -1] = np.NaN 
+        ET_data4bin = np.hstack(( chunks.reshape(-1,1), ET_data_pd[[*etdata_colnames, additional_column]].values ))
+        # to take care of pupil diameter | not sure in which dataset we needed this
+        if additional_column=='PupilDiameter':
+            ET_data4bin[ET_data4bin[:,-1] == -1, -1] = np.NaN
+            ET_data4bin[ET_data4bin[:,-1] == 0, -1] = np.NaN
 
 
     if fixation_info is not None:
@@ -246,12 +245,13 @@ def get_et_timebins(ET_data_pd, timebin_msec, do_op=None, use_maskedmean=True, d
         ET_data4bin[ fixation_info==0 ,1:] = np.NaN
 
 
-    # use chunk indices to split data into bins/chunks. 
+    # use chunk indices to split data into bins/chunks.
     ET_data4hp_bins = np.split(ET_data4bin,np.where(np.diff(ET_data4bin[:,0]))[0]+1)
     if do_op=='mean': 
         if use_maskedmean: 
             ET_data4hp_bins = [ nanmasked_mean(eii,axis=0) for eii in ET_data4hp_bins ]
         else:
+            # getting empty blocks and a warning is normal here. So supress that. 
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore", category=RuntimeWarning)
                 ET_data4hp_bins = [ np.nanmean(eii,axis=0) for eii in ET_data4hp_bins ]
@@ -332,6 +332,12 @@ def get_et_timebins(ET_data_pd, timebin_msec, do_op=None, use_maskedmean=True, d
         
         elif len(ET_data4hp_bins_filled) > nbins:
             ET_data4hp_bins_filled = ET_data4hp_bins_filled[:nbins]
+
+        if not keep_timebin_index:
+            if do_op=='mean' or do_op=='maxrep':
+                ET_data4hp_bins_filled = [ exii[1:] for exii in ET_data4hp_bins_filled ]
+            else:
+                ET_data4hp_bins_filled = [ exii[:,1:] for exii in ET_data4hp_bins_filled ]
 
 
     return ET_data4hp_bins_filled

@@ -9,7 +9,6 @@ import os
 import cv2
 import numpy as np
 
-import pims
 from tqdm import tqdm
 
 from matplotlib.backends.backend_agg import FigureCanvasAgg
@@ -17,7 +16,7 @@ import matplotlib.pylab as plt
 import matplotlib.gridspec as gridspec
 
 from .etutils import et_heatmap
-
+from .stimulusdata import load_video
 
 def rgb2gray3ch(rgb):
     gray1ch = np.dot(rgb[...,:3], [0.299, 0.587, 0.114])
@@ -38,6 +37,11 @@ def plot_gaze_basic(et_xy, video_file, merge_groups=False,
                     colors=['C3', 'C0', 'C1', 'C9'], zorder=[1,2,3,4],
                     save_viz=False, output_dir=None, show_viz=False, prep_viz=True):
 
+    if isinstance(et_xy[0],list):
+        raise SystemExit('It looks like the et data is not downsampled yet (just binned). '+
+                         'To use this method, you need to run ETdata.get_timebinned_data() '+
+                         'with bin_operation=True option!')
+    
     if save_viz and output_dir is None:
         raise SystemExit("Please provide an 'output_dir' to save visualization output!")
     
@@ -48,26 +52,22 @@ def plot_gaze_basic(et_xy, video_file, merge_groups=False,
     if show_viz:
         print("\n\tPress q to stop script!\n")
         
-    
-    vr = pims.PyAVReaderTimed(video_file)
-    frame_width, frame_height = vr.frame_shape[1], vr.frame_shape[0]
-    nframes, vid_fps = len(vr), vr.frame_rate
+    vr, vid_info = load_video(video_file)
+    frame_width, frame_height = vid_info['frame_width'], vid_info['frame_height']
+    nframes, vid_fps = vid_info['nframes'], vid_info['fps']
 
     vid_basename = os.path.splitext(os.path.basename(video_file))[0]
     if save_viz:
-        if not os.path.exists(output_dir):
-            os.makedirs(output_dir)
-    
+        os.makedirs(output_dir, exist_ok=True)
+        
         # some setting for writing videos with openCV.        
-        output_fname = os.path.join(output_dir,vid_basename) + "_ETgaze.avi"
+        output_fname = os.path.join(output_dir,vid_basename) + "_ETgaze.mp4"
         output_file = cv2.VideoWriter(filename=output_fname,
-                    # if opencv does not support x264
-                    # try other formats (e.g. MPEG, XVID).
-                    # all formats work with a .avi format (alternative .mp4). 
-                    fourcc=cv2.VideoWriter_fourcc(*"MPEG"),
+                    # fourcc=cv2.VideoWriter_fourcc(*"MPEG"), # for .avi
+                    fourcc=cv2.VideoWriter_fourcc(*"mp4v"), # for .mp4
                     fps=float(vid_fps),
                     frameSize=(frame_width,frame_height), # (width, height),
-                    isColor=True )
+                    isColor=True)
     
     
     print('Generating visualization...')
@@ -87,12 +87,13 @@ def plot_gaze_basic(et_xy, video_file, merge_groups=False,
         if merge_groups:
             et_xy_plot = np.concatenate(et_xy,0)
             for sii in range(et_xy_plot.shape[0]):
-                ax.plot(et_xy_plot[sii,fii,0],et_xy_plot[sii,fii,1],'o' ,markersize=10)
+                ax.plot(et_xy_plot[sii,fii,0],et_xy_plot[sii,fii,1],'o', markersize=10)
         else:
             for gii in range(len(et_xy)):
                 et_xy_plot = et_xy[gii]
                 for sii in range(et_xy_plot.shape[0]):
-                    ax.plot(et_xy_plot[sii,fii,0],et_xy_plot[sii,fii,1],'o',color=colors[gii], alpha=1-(gii*0.12) ,markersize=10)
+                    ax.plot(et_xy_plot[sii,fii,0],et_xy_plot[sii,fii,1],'o',
+                            color=colors[gii], alpha=1-(gii*0.12), markersize=10)
     
         ax.set_xlim([0,frame_width])
         ax.set_ylim([0,frame_height])
@@ -116,8 +117,9 @@ def plot_gaze_basic(et_xy, video_file, merge_groups=False,
             # a control againts opening too many image display windows.
             dum_cnt += 1
             if dum_cnt>2:
-                raise SystemExit("It is better to set prep_visualization=False")
-                
+                raise SystemExit("It is better to set prep_visualization=False "+\
+                                 "if all looks good about visualization!")
+                    
         if save_viz:    
             output_file.write(img_rgb[...,::-1])
     
@@ -166,26 +168,23 @@ def plot_compare_2groups(et_xy, video_file, sigma=21, plot_groups=[0,1],
     
     grp_1, grp_2 = plot_groups
     
-    vr = pims.PyAVReaderTimed(video_file)
-    frame_width, frame_height = vr.frame_shape[1], vr.frame_shape[0]
-    nframes, vid_fps = len(vr), vr.frame_rate
+    vr, vid_info = load_video(video_file)
+    frame_width, frame_height = vid_info['frame_width'], vid_info['frame_height']
+    nframes, vid_fps = vid_info['nframes'], vid_info['fps']
     framesize = [frame_width,frame_height] # required for heatmap.
     
     vid_basename = os.path.splitext(os.path.basename(video_file))[0]
     if save_viz:
-        if not os.path.exists(output_dir):
-            os.makedirs(output_dir)
+        os.makedirs(output_dir, exist_ok=True)
     
         # some setting for writing videos with openCV.        
-        output_fname = os.path.join(output_dir,vid_basename) + "_compare_grps.avi"
+        output_fname = os.path.join(output_dir,vid_basename) + "_compare_grps.mp4"
         output_file = cv2.VideoWriter(filename=output_fname,
-                    # if opencv does not support x264
-                    # try other formats (e.g. MPEG, XVID).
-                    # all formats work with a .avi format (alternative .mp4). 
-                    fourcc=cv2.VideoWriter_fourcc(*"MPEG"),
+                    # fourcc=cv2.VideoWriter_fourcc(*"MPEG"), # for .avi
+                    fourcc=cv2.VideoWriter_fourcc(*"mp4v"), # for .mp4
                     fps=float(vid_fps),
                     frameSize=(int(fig_w*dpi),int(fig_h*dpi)), # (width, height),
-                    isColor=True )
+                    isColor=True)
     
     
     print('Generating visualization...')
@@ -202,7 +201,6 @@ def plot_compare_2groups(et_xy, video_file, sigma=21, plot_groups=[0,1],
         ax3 = fig.add_subplot(gs[1, :3]) # plot in the bottom.        
         ax4 = fig.add_subplot(gs[1, 3:]) # plot in the bottom.        
     
-    
         for aii, (ax,grp) in enumerate([ (ax1,grp_1), (ax2,grp_2) ]):    
             
             ax.axis("off")
@@ -211,7 +209,8 @@ def plot_compare_2groups(et_xy, video_file, sigma=21, plot_groups=[0,1],
         
             et_xy_plot = et_xy[grp]
             for sii in range(et_xy_plot.shape[0]):
-                ax.plot(et_xy_plot[sii,fii,0],et_xy_plot[sii,fii,1],'o',color=colors[aii] ,markersize=10)
+                ax.plot(et_xy_plot[sii,fii,0],et_xy_plot[sii,fii,1], 'o', 
+                        markersize=8, color=colors[aii])
         
             ax.set_xlim([0,frame_width])
             ax.set_ylim([0,frame_height])
@@ -227,14 +226,15 @@ def plot_compare_2groups(et_xy, video_file, sigma=21, plot_groups=[0,1],
         
             # get heatmap
             et_xy_plot = et_xy[grp]
-            heatmap = et_heatmap(et_xy_plot[:,fii,:], framesize, sigma, None, get_full=True, get_down=False )
+            heatmap = et_heatmap(et_xy_plot[:,fii,:], framesize, sigma, 
+                                 None, get_full=True, get_down=False )
             
             # this thresholding is different than threshold_mean due to heatmap>0 condition.
             lowbound = np.mean(heatmap[heatmap>0])
             # lowbound = threshold_mean(heatmap)
             
             heatmap[heatmap<=lowbound] = np.nan
-            ax.imshow(heatmap,alpha=0.75,zorder=20,cmap=plt.cm.jet,origin='upper')    
+            ax.imshow(heatmap, alpha=0.75, zorder=20, cmap=plt.cm.jet, origin='upper')    
             
             ax.set_xlim([0,frame_width])
             ax.set_ylim([0,frame_height])
@@ -261,7 +261,8 @@ def plot_compare_2groups(et_xy, video_file, sigma=21, plot_groups=[0,1],
             # a control againts opening too many image display windows.
             dum_cnt += 1
             if dum_cnt>0:
-                raise SystemExit("It is better to set prep_visualization=False")
+                raise SystemExit("It is better to set prep_visualization=False "+\
+                                 "if all looks good about visualization!")
                 
         if save_viz:    
             output_file.write(img_rgb[...,::-1])
@@ -281,10 +282,6 @@ def plot_compare_2groups(et_xy, video_file, sigma=21, plot_groups=[0,1],
         
     if show_viz:
         cv2.destroyAllWindows()
-        
-    
-    
-    
     
     
     

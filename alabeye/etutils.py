@@ -19,40 +19,66 @@ def get_heatmap_sci(x, y, sigma=None, framesize = [1000,1000] ):
     if sigma is None: 
         raise ValueError('Be sure that sigma value is proper!')
     
-    heatmap, xedges, yedges = np.histogram2d(x, y, bins=framesize, range = [[0,framesize[0]],[0,framesize[1]]])
-    heatmap = gaussian_filter(heatmap.T, sigma=sigma,mode='constant',cval=0.0) # needed .T due to histogram2d's output settings. 
+    heatmap, xedges, yedges = np.histogram2d(x, y, bins=framesize, 
+                                range = [[0,framesize[0]],[0,framesize[1]]])
+    # needed .T due to the settings of histogram2d's output. 
+    heatmap = gaussian_filter(heatmap.T, sigma=sigma, 
+                              mode='constant',cval=0.0) 
 
     extent = [xedges[0], xedges[-1], yedges[0], yedges[-1]]
     return heatmap, extent
 
 
 def et_heatmap(et_xy_in, framesize, sigma, hp_down_factor, get_full=False, get_down=True,
-               nan_ratio=1.):
+               nan_ratio=1.0, cut_pad_down=None, cut_pad_up=None, trivial_return=True):
     # et_xy_in: [n_samples, 2], columns are x and y components
     # framesize = [frame_width,frame_height]
     
-    if et_xy_in.ndim == 1:
+    if et_xy_in is not None and et_xy_in.ndim == 1:
         et_xy_in = et_xy_in[np.newaxis]
     
-    # here we can eliminate video blocks which contain more that 50% problematic ET points.
-    if np.isnan(np.sum(et_xy_in,1)).sum() >= nan_ratio*et_xy_in.shape[0]:
+    # here we can eliminate video blocks which contain more than 50% problematic ET points.
+    if et_xy_in is None or np.isnan(et_xy_in).any(axis=1).sum() >= nan_ratio*et_xy_in.shape[0]:
+        trivial_output = True
         if get_down:
-            heatmap_down = np.zeros((np.array(framesize[::-1])/hp_down_factor).astype(int))
+            if trivial_return:
+                heatmap_down = None
+            else:
+                heatmap_down = np.zeros((np.array(framesize[::-1])/hp_down_factor).astype(int))
         if get_full:
-            heatmap = np.zeros((np.array(framesize[::-1])).astype(int))
+            if trivial_return:
+                heatmap = None
+            else:
+                heatmap = np.zeros((np.array(framesize[::-1])).astype(int))
     else:
+        trivial_output = False
         if get_down:
             heatmap_down, _ = get_heatmap_sci(et_xy_in[:,0]/hp_down_factor,et_xy_in[:,1]/hp_down_factor,
                              sigma=sigma/float(hp_down_factor),framesize=(np.array(framesize)/hp_down_factor).astype(int))
         if get_full:
             heatmap, _ = get_heatmap_sci(et_xy_in[:,0],et_xy_in[:,1],sigma=sigma,framesize=framesize)
 
-    if get_down and get_full:
-        return heatmap_down, heatmap
-    if get_full and not get_down:
+
+    if (not trivial_output) and (cut_pad_down is not None) and (cut_pad_up is not None):
+        
+        if get_down and not get_full:
+            heatmap_down = heatmap_down[cut_pad_down//int(hp_down_factor):cut_pad_up//int(hp_down_factor)]
+            return heatmap_down
+        elif get_full and not get_down:
+            heatmap = heatmap[cut_pad_down:cut_pad_up]
+            return heatmap
+        else:
+            heatmap_down = heatmap_down[cut_pad_down//int(hp_down_factor):cut_pad_up//int(hp_down_factor)] 
+            heatmap = heatmap[cut_pad_down:cut_pad_up]
+            return heatmap_down, heatmap
+            
+
+    if get_down and not get_full:
+        return heatmap_down
+    elif get_full and not get_down:
         return heatmap
     else:
-        return heatmap_down
+        return heatmap_down, heatmap
 
 
 
@@ -60,8 +86,7 @@ def et_heatmap(et_xy_in, framesize, sigma, hp_down_factor, get_full=False, get_d
 norm_zs = lambda v: (v-v.mean())/v.std() ## z-score function
 
 
-# penalizing NaNs.
-def compute_nss(sal_norm, gaze_xy):
+def compute_nss(sal_norm, gaze_xy, nan_ratio=1.0, penalize_nan=False):
     # provide normalized saliency map. 
     # or normalize saliency map here. 
     # sal_norm = (sal_map - np.mean(sal_map)) / np.std(sal_map)      
@@ -71,13 +96,18 @@ def compute_nss(sal_norm, gaze_xy):
     
     assert gaze_xy.shape[1] == 2
 
+    if np.isnan(gaze_xy).any(axis=1).sum() >= nan_ratio*gaze_xy.shape[0]:
+        return np.NaN
     
     gaze_xy = gaze_xy.round()
 
     temp = []
     for cv, rv in gaze_xy:
         if np.isnan(cv) or np.isnan(rv):
-            temp.append(0)
+            if penalize_nan:
+                temp.append(0)
+            else:
+                continue
         else:
             # correct for rounding above. 
             if rv >= sal_norm.shape[0] : rv = sal_norm.shape[0] - 1
@@ -88,9 +118,10 @@ def compute_nss(sal_norm, gaze_xy):
 
 
 
-# penalizing NaNs.
-def compute_ioc(heat_bin, gaze_xy):
+def compute_ioc(heat_bin, gaze_xy, nan_ratio=1.0, penalize_nan=False):
 
+    gaze_xy = np.array(gaze_xy, copy=True)
+    
     # or change temp.append(False) below.
     assert heat_bin.dtype == bool
     
@@ -99,12 +130,18 @@ def compute_ioc(heat_bin, gaze_xy):
 
     assert gaze_xy.shape[1] == 2
 
+    if np.isnan(gaze_xy).any(axis=1).sum() >= nan_ratio*gaze_xy.shape[0]:
+        return np.NaN
+
     gaze_xy = gaze_xy.round()
     
     temp = []
     for cv, rv in gaze_xy:
         if np.isnan(cv) or np.isnan(rv):
-            temp.append(False)
+            if penalize_nan:
+                temp.append(False)
+            else:
+                continue
         else:
             # correct for rounding above. 
             if rv >= heat_bin.shape[0] : rv = heat_bin.shape[0] - 1
@@ -251,6 +288,17 @@ def load_gazedata_episodes(gazedata_dir, behavioraldata_file=None):
                 colnames.append(label_txt)
                 asd_data_vals.append(asd_feat)
                 td_data_vals.append(td_feat)
+    
+    
+                if os.path.isfile(os.path.join(gazedata_dir,f'{meas_ii}_asd_{vid_ii}_asdref.npy')):
+                        
+                    asd_feat_asdref = np.load(os.path.join(gazedata_dir,f'{meas_ii}_asd_{vid_ii}_asdref.npy'))
+                    td_feat_asdref = np.load(os.path.join(gazedata_dir,f'{meas_ii}_td_{vid_ii}_asdref.npy'))
+        
+                    colnames.append(label_txt+'_asdref')
+                    asd_data_vals.append(asd_feat_asdref)
+                    td_data_vals.append(td_feat_asdref)
+
     
     
     # ----- Load behavioral assessment data -----

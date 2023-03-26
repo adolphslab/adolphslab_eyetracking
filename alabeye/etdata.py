@@ -49,7 +49,7 @@ class ETdata:
     
     def __init__(self, taskname=None, tasktype='video', 
                  data_file=None, subj_info_file=None, use_subj_info=False,
-                 stim_dir=None, stimname_map=None):
+                 stim_dir=None, stimname_map=None, load_data=False):
         
         self.taskname = taskname
         
@@ -109,6 +109,9 @@ class ETdata:
                 self.ngroups = len(np.unique(self.subjs_group))
 
             self.hdf_datakeys = datakeys
+            
+            if load_data:
+                self.load_rawdata()
 
 
         if self._load_pkl:
@@ -166,33 +169,46 @@ class ETdata:
     stim_mediainfo = property(_get_stim_mediainfo, _set_stim_mediainfo)
 
 
-    def load_rawdata(self, load_these_subjs=None, skip_these_subjs=[]):
+    def load_rawdata(self, subjs_use=None, skip_these_subjs=[]):
+        
+        if self.taskname is None:
+            raise SystemExit('Need to define a taskname first to load the corresponding raw data!')
         
         if self._load_hdf is False:
             raise SystemExit("Please provide an hdf file as 'data_file' in ETdata() to load raw data!")
         
         if skip_these_subjs is None:
             skip_these_subjs = []
+
+        if isinstance(subjs_use, str):
+            subjs_use = [ subjs_use ]
         
-        if load_these_subjs is None:
-            load_these_subjs = self.subjs
+        if subjs_use is None:
+            subjs_use = self.subjs
+        
+        if len(subjs_use) == 0:
+            print("No information was provided about subjects using 'subj_info_file'."+\
+                  "Loading data from all subjects available in the hdf file!")
+            subjs_use = self.hdf_allsubjs
         
         self.rawdata = {}
         print('Loading raw data...')
-        for sii in tqdm(load_these_subjs):
+        for sii in tqdm(subjs_use):
             
             if sii in skip_these_subjs:
                 continue
 
             key2load = f'/{sii}/{self.taskname}'
-            assert key2load in self.hdf_datakeys, print(f'{key2load} is not available in hdf file!')
+            if key2load not in self.hdf_datakeys:
+                raise SystemExit(f'{key2load} is not available in hdf file!\n' +\
+                                 'Please check the inputs you provided!')
             
             et_data_pd = pd.read_hdf(self.data_file, key2load, mode='r')
             self.rawdata[sii] = et_data_pd
             
     
-    def get_timebinned_data(self, timebin_msec='frame_duration', 
-                            load_these_subjs=None, skip_subjs=[], split_groups=False, 
+    def get_timebinned_data(self, timebin_sec='frame_duration', 
+                            subjs_use=None, skip_these_subjs=[], split_groups=False, 
                             save_output=False, output_dir=None, output_overwrite=True,
                             rm_subj_withhalfmissingdata=False, bin_operation='mean',
                             fix_length=False, nbins=None):
@@ -217,42 +233,49 @@ class ETdata:
                     raise SystemExit("Enter another 'output_dir', delete 'output_dir' manually,"+
                                      " or set 'output_overwrite=True'")
                     
-            pickle_file = os.path.join(output_dir,f'timebinned_data_{self.taskname}.pkl')
-            if os.path.isfile(pickle_file):
+            pickle_file = os.path.join(output_dir,f'timebinned_data_{self.taskname}_{timebin_sec}.pkl')
+            if os.path.isfile(pickle_file) and not output_overwrite:
                 raise SystemExit(f"Overwriting pickle file: {pickle_file}" + 
-                                 "Please change 'output_dir' or delete file manually!")
+                                 "Please change 'output_dir' or delete the file manually!")
 
-        if skip_subjs is None:
-            skip_subjs = []
+        if skip_these_subjs is None:
+            skip_these_subjs = []
 
-        if load_these_subjs is None:
-            load_these_subjs = self.subjs
+        if subjs_use is None:
+            subjs_use = self.subjs
         
-        if not isinstance(load_these_subjs,list):
-            load_these_subjs = load_these_subjs.tolist()
+        if not isinstance(subjs_use,list):
+            subjs_use = subjs_use.tolist()
         
         if split_groups:
-            _subjs_group = [ self.subjs_group[self.subjs.index(sii)] for sii in load_these_subjs ] 
+            _subjs_group = [ self.subjs_group[self.subjs.index(sii)] for sii in subjs_use ] 
         else:
             _subjs_group = None
             
-        if isinstance(timebin_msec, str):
-            if timebin_msec != 'frame_duration':
-                raise ValueError("timebin_msec should be either 'frame_duration' or a duration in millisec!")
+        if isinstance(timebin_sec, str):
+            if timebin_sec != 'frame_duration':
+                raise ValueError("timebin_sec should be either 'frame_duration' or a duration in seconds!")
             
             vid_fps = self.stim_mediainfo['fps']
-            timebin_msec = 1000./vid_fps # frame duration in msec.
+            timebin_sec = 1./vid_fps # frame duration in sec.
             
             if nbins is None:
                 nbins = self.stim_mediainfo['nframes']
         else:
             if fix_length and nbins is None:
-                raise SystemExit("if fix_length=True, then should enter 'nbins'!")
+                print("\n--->'nbins' not provided. Fixing length across subjects using total video duration...\n")
+
+                frame_duration_sec = 1. / self.stim_mediainfo['fps']
+                # using frame_duration_sec * nframes is in general safer than depending on vid_duration_sec, 
+                # especially while using pims.PyAVReaderIndexed()
+                # nbins = int(frame_duration_sec * nframes / timebin_sec) # int() rounds to floor
+                nbins = np.round(frame_duration_sec * self.stim_mediainfo['nframes'] / timebin_sec).astype(int) # last bin will be smaller.
+                
     
         print('Loading raw data and applying timebins...')
-        # Note that if rm_subj_withhalfmissingdata=True, bins_subjs might be different than load_these_subjs.
-        bins_subjs, bins_groups, bins_etdata = run_et_timebins(self.taskname, load_these_subjs, 
-                                               self.data_file, self.hdf_datakeys, timebin_msec, 
+        # Note that if rm_subj_withhalfmissingdata=True, bins_subjs might be different than subjs_use.
+        bins_subjs, bins_groups, bins_etdata = run_et_timebins(self.taskname, subjs_use, 
+                                               self.data_file, self.hdf_datakeys, timebin_sec, 
                                                rm_subj_withhalfmissingdata, bin_operation = bin_operation,
                                                split_groups=split_groups, subjs_group=_subjs_group,
                                                fix_length=fix_length, nbins=nbins)
@@ -269,9 +292,19 @@ class ETdata:
 
     def visualize_gaze(self, merge_groups=False,
                        colors=['C3', 'C0', 'C1', 'C9'], zorder=[1,2,3,4],
-                       save_viz=False, output_dir=None, show_viz=False, prep_viz=True):
+                       save_viz=False, output_dir='gaze_visualization', 
+                       show_viz=False, prep_viz=True):
 
         video_file = os.path.join(self.stim_dir,self.stim_videoname)
+
+        try:
+            self.data
+        except AttributeError:
+            print("---> Generating timebinned data automatically. If you have specific settings, "+\
+                  "use ETdata.get_timebinned_data() before running ETdata.visualize_gaze()")
+            self.get_timebinned_data(timebin_sec='frame_duration',
+                                     split_groups=True, bin_operation='mean',
+                                     fix_length=True)
 
         # for general use, this instance method is defined as a separate function. 
         plot_gaze_basic(self.data, video_file, merge_groups=merge_groups,
@@ -282,9 +315,19 @@ class ETdata:
 
     def visualize_2groups(self, sigma=21, plot_groups=[0,1],
                        colors=['C3', 'C0', 'C1', 'C9'], zorder=[1,2,3,4],
-                       save_viz=False, output_dir=None, show_viz=False, prep_viz=True):
+                       save_viz=False, output_dir='gaze_visualization', 
+                       show_viz=False, prep_viz=True):
 
         video_file = os.path.join(self.stim_dir,self.stim_videoname)
+
+        try:
+            self.data
+        except AttributeError:
+            print("---> Generating timebinned data automatically. If you have specific settings, "+\
+                  "use ETdata.get_timebinned_data() before running ETdata.visualize_2groups()")
+            self.get_timebinned_data(timebin_sec='frame_duration',
+                                     split_groups=True, bin_operation='mean',
+                                     fix_length=True)
 
         # for general use, this instance method is defined as a separate function. 
         plot_compare_2groups(self.data, video_file, sigma=sigma, plot_groups=plot_groups,
