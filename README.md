@@ -158,8 +158,6 @@ This command will process the provided sample video located under [examples/samp
 
 ![face detection](./examples/sample_data/sample_output/office_sample_vid_insightface.gif)
 
-%%% <img src="./examples/sample_data/sample_output/office_sample_vid_insightface.gif" width="400" />
-
 
 To use this script with other videos and save the outputs to a specific location, run the script as follows:
 ```bash
