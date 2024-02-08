@@ -22,25 +22,50 @@ from .viz import plot_gaze_basic, plot_compare_2groups
 implemented_tasktypes = ['video']
 
 
-def makedir(output_dir, warn=True, verbose=True, sysexit=False):
+def makedir(output_dir, exist_ok=True, warn=True, verbose=True):
+    """
+    Create a directory at the specified path if it does not already exist.
+
+    Parameters
+    ----------
+    output_dir : str
+        The path of the directory to be created.
+    exist_ok : bool, optional
+        If False, raises an error if the directory already exists. Default is True.
+    warn : bool, optional
+        If True, displays a warning if the directory already exists. Default is True.
+    verbose : bool, optional
+        If True, prints messages about the function's actions. Default is True.
+
+    Returns
+    -------
+    bool
+        True if the directory was created or already exists without warnings, and False if the directory
+        already exists and warnings are issued (only when exist_ok is True and warn is True).
+
+    Raises
+    ------
+    SystemExit
+        If the directory already exists and exist_ok is set to False.
+    """
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
         if verbose: 
-            print(f'{output_dir} is ready.')
+            print(f"Directory '{output_dir}' is created.")
         return True
-    else:
-        if sysexit:
-            raise SystemExit(f'\nThe folder {output_dir} already exists. Risk of overwriting files!'+
-                             "\nEnter another output_dir, allow overwriting with 'gendir(output_dir, sysexit=False)', "+
-                             "or delete 'output_dir' manually.\n")
-        if warn:
-            if verbose:
-                print(f'\nThe folder {output_dir} already exists. Risk of overwriting files!\n') 
-            return False
-        else:
-            if verbose:
-                print(f'\nThe folder {output_dir} already exists. Overwriting files!\n') 
-            return True
+
+    if not exist_ok:
+        raise SystemExit(f"\nThe directory '{output_dir}' already exists. Risk of overwriting files!" +
+                         "\nSpecify a different output_dir, allow overwriting with 'makedir(output_dir, exist_ok=True)'," +
+                         " or delete the existing directory manually.\n")
+
+    if warn and verbose:
+        print(f"\nThe directory '{output_dir}' already exists. Risk of overwriting files!\n") 
+    elif verbose:
+        print(f"\nThe directory '{output_dir}' already exists. Overwriting files!\n")
+
+    return False if warn else True
+
 
 
 class ETdata:

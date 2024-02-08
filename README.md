@@ -19,7 +19,7 @@ Eye tracking is a powerful tool for studying visual attention and gaze behavior.
 
 This repository provides a set of tools for analyzing eye tracking data. These tools include Python scripts and notebooks for preprocessing raw gaze data obtained from an eye tracker, visualizing gaze data using scatter plots and heat maps, performing similarity analysis between different subjects' gaze data, and conducting statistical analyses based on time spent looking at specific areas of interest (AOIs) within the visual stimulus. 
 
-Please note that this repository is a work in progress and we are actively adding new features and improving existing ones. We appreciate your patience and understanding as we continue to work on this project. Thank you for your interest in our work!
+Please note that this repository is a work in progress and we are adding new features and improving existing ones. We appreciate your patience and understanding as we continue to work on this project. Thank you for your interest in our work!
 
 ## Getting Started
 To help users understand and utilize the various functionalities of this repository, we have included detailed scripts and sample data in the [`examples`](./examples/) directory. Here we describe how to install the repository to a local machine and use the provided sample data to demonstrate some of the key features of the repository.
@@ -107,7 +107,7 @@ Those will produce the visualization:
 ![gaze scatters](./examples/sample_data/gaze_visualization/office_sample_vid_ETgaze.gif)
 
 
-Similarly,  
+Similarly,
 ```bash
 # Visualize two groups separately with heatmaps.
 sample_etdata_re.visualize_2groups(save_viz=True,

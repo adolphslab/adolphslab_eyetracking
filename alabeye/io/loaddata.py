@@ -211,7 +211,7 @@ def run_et_timebins(taskname, subjs, hdf_file, datakeys, timebin_sec,
 
 
 
-def get_et_timebins(ET_data_pd, timebin_sec, do_op=None,
+def get_et_timebins(ET_data_pd, timebin_sec=None, chunks=None, do_op=None,
                     fix_length=False, nbins=None, additional_column=None, 
                     keep_timebin_index=True, etdata_colnames=['GazeX','GazeY'],
                     fixation_info=None, use_maskedmean=False # These are not used any more in analyses indeed.  
@@ -220,16 +220,22 @@ def get_et_timebins(ET_data_pd, timebin_sec, do_op=None,
     assert do_op in ['mean', 'maxrep', None], "do_op should be one of these: ['mean', 'maxrep', None]"
     
     if fix_length and nbins is None:
-        raise SystemExit("if fix_length=True, then should enter 'nbins'!")
+        raise SystemExit("if fix_length=True, then should you provide 'nbins'!")
     
-    if timebin_sec > 10: 
-        print('In the current version binsize should be in secs!' +\
-              'Please be sure that your binsize is in seconds!')
+    if timebin_sec is not None and timebin_sec > 10: 
+        print('In the current version binsize should be in seconds!' +\
+              'Please be sure that the timebin_sec is in seconds!')
             
     ET_rec_time = ET_data_pd['RecTime'].values 
 
-    # needed to split ET_data into chunks/bins of duration of a frame (in heatmap calculations this was binsize).
-    chunks = (ET_rec_time//timebin_sec + 1).astype(int) # same as np.asarray([ np.divmod(ii,binsize)[0]+1 for ii in ET_rec_time ])
+    if chunks is None:
+        assert timebin_sec is not None
+
+        # needed to split ET_data into chunks/bins of duration of a frame (in heatmap calculations this was binsize).
+        chunks = ( ET_rec_time / timebin_sec ).astype(int) + 1 
+    else:
+        assert timebin_sec is None
+
     if additional_column is None:
         ET_data4bin = np.hstack(( chunks.reshape(-1,1), ET_data_pd[etdata_colnames].values ))
     else:
@@ -246,7 +252,7 @@ def get_et_timebins(ET_data_pd, timebin_sec, do_op=None,
 
 
     # use chunk indices to split data into bins/chunks.
-    ET_data4hp_bins = np.split(ET_data4bin,np.where(np.diff(ET_data4bin[:,0]))[0]+1)
+    ET_data4hp_bins = np.split(ET_data4bin, np.where(np.diff(ET_data4bin[:,0]))[0]+1)
     if do_op=='mean': 
         if use_maskedmean: 
             ET_data4hp_bins = [ nanmasked_mean(eii,axis=0) for eii in ET_data4hp_bins ]

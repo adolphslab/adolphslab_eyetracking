@@ -8,25 +8,49 @@ Some functions to load densepose feature extraction outputs.
 
 import numpy as np
 
-
 import base64
 from io import BytesIO
 from PIL import Image
 
-from skimage.morphology import convex_hull_image
 
-def radmask(center_xy,radius,array_shape):
-    
-    if np.array(center_xy).shape != (2,): 
-        raise SystemExit('Problem in the input of radMask')
-    
-    col_val = center_xy[0] 
-    row_val = center_xy[1] 
-    n_rows,n_cols = array_shape
-    rows,cols = np.ogrid[-row_val:n_rows-row_val,-col_val:n_cols-col_val]
-    mask = cols*cols + rows*rows <= radius*radius
-    return mask    
+def radmask(center_xy, radius, array_shape):
+    """
+    Create a circular mask of a given radius centered at a specified point in a 2D array.
 
+    Parameters
+    ----------
+    center_xy : tuple of int
+        A tuple (x, y) representing the center coordinates of the circle in the array.
+    radius : int
+        The radius of the circular mask.
+    array_shape : tuple of int
+        Shape of the array (number of rows, number of columns) in which the mask will be applied.
+
+    Returns
+    -------
+    ndarray
+        A boolean array where True represents the points inside the circle.
+
+    Raises
+    ------
+    ValueError
+        If the `center_xy` does not have two elements (x, y coordinates).
+
+    """
+    # Ensure the center coordinate is a 2-element tuple
+    if np.array(center_xy).shape != (2,):
+        raise ValueError('Center coordinates must be a 2-element tuple')
+
+    # Extract row and column values from center coordinates
+    col_val, row_val = center_xy
+    n_rows, n_cols = array_shape
+
+    # Create a grid of coordinates centered around the center point
+    rows, cols = np.ogrid[-row_val:n_rows-row_val, -col_val:n_cols-col_val]
+
+    # Calculate the mask by checking if points are within the specified radius
+    mask = cols**2 + rows**2 <= radius**2
+    return mask
 
 
 #%% for bodyparts obtained from densepose
@@ -302,7 +326,8 @@ def get_faceareas_simple(this_frame_results, frame_height, frame_width,
 
 
 # used in fixation analyses for RetinaFace detections. 
-def get_faceareas(this_frame_results, frame_height, frame_width, detection_thrs=0.5):
+def get_faceareas(this_frame_results, frame_height, frame_width, 
+                  detection_thrs=0.5):
 
     face_areas = np.zeros((frame_height,frame_width),dtype=bool)
     face_areas_eyes = np.zeros((frame_height,frame_width),dtype=bool)

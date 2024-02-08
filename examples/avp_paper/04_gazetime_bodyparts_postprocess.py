@@ -18,7 +18,7 @@ import pickle
 # The Adolphs Lab data analysis scripts for eye tracking are provided 
 # under alabeye package  
 from alabeye.etdata import makedir
-from alabeye.stats import cohen_d_ci
+from alabeye.stats import cohen_d_ci, list_flatten
 
 
 #%% Main directory for experiment data
@@ -33,7 +33,7 @@ vidclips = [ ['Ep1_Clip1', 'Ep1_Clip2', 'Ep1_Clip3'], 'Ep4_AQNR', ['Ep1_Clip1', 
 vidclips_txt = [ 'Ep1', 'Ep4_AQNR', 'AllVids' ]
 
 # set up the output directory
-makedir(output_dir,sysexit=False)
+makedir(output_dir)
 
 #%%
 for vid_ii,vid_txt in zip(vidclips,vidclips_txt):
@@ -157,8 +157,7 @@ for vid_ii,vid_txt in zip(vidclips,vidclips_txt):
     for pii, (aoi, (var_asd,var_td)) in enumerate(corr_pairs):
         
         d_vals = cohen_d_ci(var_td,var_asd,rm_extreme=False)
-        keep_dvals.append([*d_vals])
-
+        keep_dvals.append(list_flatten(d_vals))
 
     keep_dvals = np.vstack(keep_dvals)
 

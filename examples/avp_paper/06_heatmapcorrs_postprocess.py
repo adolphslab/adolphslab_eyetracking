@@ -15,7 +15,7 @@ import pandas as pd
 # The Adolphs Lab data analysis scripts for eye tracking are provided 
 # under alabeye package  
 from alabeye.etdata import makedir
-from alabeye.stats import cohen_d_ci
+from alabeye.stats import cohen_d_ci, list_flatten
 
 #%% Main directory for experiment data
 root_dir = '/home/umit/Documents/Research_ET/AutismVids/avp_data'
@@ -32,7 +32,7 @@ vidclips = [ ['Ep1_Clip1', 'Ep1_Clip2', 'Ep1_Clip3'], 'Ep4_AQNR', ['Ep1_Clip1', 
 vidclips_txt = [ 'Ep1', 'Ep4_AQNR', 'AllVids' ]
 
 # set up the output directory
-makedir(output_dir,sysexit=False)
+makedir(output_dir)
 
 #%%
 for vid_ii,vid_txt in zip(vidclips,vidclips_txt):
@@ -91,6 +91,8 @@ for vid_ii,vid_txt in zip(vidclips,vidclips_txt):
     td_corrs_mean = np.nanmean(td_corrs, 1)
     
     dvals = cohen_d_ci(td_corrs_mean, asd_corrs_mean, rm_extreme=False)
+    dvals = list_flatten(dvals)
+    
     dval_cols = [ 'd-direct', 'd-bootstrap-mean', 'd CI lower', 'd CI upper', 'd-pval' ]
     
     dvals_df = pd.DataFrame(data=np.asarray(dvals).reshape(1,-1), index=[f'GazeCorrs{ref_txt}'], columns=dval_cols)

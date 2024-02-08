@@ -18,7 +18,7 @@ import pickle
 # The Adolphs Lab data analysis scripts for eye tracking are provided 
 # under alabeye package  
 from alabeye.etdata import makedir
-from alabeye.stats import cohen_d_ci
+from alabeye.stats import cohen_d_ci, list_flatten
 from alabeye.etutils import get_cohend_vals, get_subj_vals
 
 
@@ -36,7 +36,7 @@ vidclips_txt = [ 'Ep1', 'Ep4_AQNR', 'AllVids' ]
 scale2facetime = False
 
 # set up the output directory
-makedir(output_dir,sysexit=False)
+makedir(output_dir)
 
 #%%
 for vid_ii,vid_txt in zip(vidclips,vidclips_txt):
@@ -139,7 +139,9 @@ for vid_ii,vid_txt in zip(vidclips,vidclips_txt):
                            eye_gaze[td_subjs], mouth_gaze[td_subjs], scale2facetime=scale2facetime)
     
 
-    keep_dvals = np.vstack( [ [*d_os], [*d_f], [*d_ef], [*d_mf] ] )
+    keep_dvals = np.vstack( [ list_flatten(d_os), list_flatten(d_f), 
+                              list_flatten(d_ef), list_flatten(d_mf) ] )
+        
     rows = ['On-screen', 'Face', 'Eyes', 'Mouth' ]
     cols = ['d-direct', 'd-bootstrap-mean', 'd CI lower', 'd CI upper', 'd-pval' ]
     

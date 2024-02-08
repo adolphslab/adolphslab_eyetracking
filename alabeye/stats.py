@@ -11,6 +11,19 @@ import numpy as np
 from scipy.stats import norm, zscore
 
 
+
+def list_flatten(list_in):
+    list_out = []
+
+    for eii in list_in:
+        if isinstance(eii, list):
+            for tii in eii:
+                list_out.append(tii)
+        else:
+            list_out.append(eii)
+    return list_out
+
+
 def nanmasked_mean(arr_,axis):
     # works as np.nanmean(arr_,axis=1) but not raises: RuntimeWarning: Mean of empty slice
     # masked_where is slower. masked_invalid almost the same speed. 
@@ -46,8 +59,11 @@ def cross_correlation(A, B, axis=1): # default rows
     Not in ideal speed but has a broad use. 
     # see also: stackoverflow.com/questions/19401078/efficient-columnwise-correlation-coefficient-calculation-with-numpy
     
-    instead of cross_correlation(A, A, axis=1) or cross_correlation(A, B=None, axis=1) use np.corrcoef(xarr,rowvar=True)
-    or instead of cross_correlation(A, A, axis=0) use np.corrcoef(xarr,rowvar=False); np.corrcoeff() is faster.
+    instead of cross_correlation(A, A, axis=1) or cross_correlation(A, B=None, axis=1) 
+    use np.corrcoef(xarr,rowvar=True)
+    
+    or instead of cross_correlation(A, A, axis=0) use np.corrcoef(xarr,rowvar=False); 
+    np.corrcoeff() is faster.
     
     '''
     n_row, n_col = A.shape
@@ -60,9 +76,7 @@ def cross_correlation(A, B, axis=1): # default rows
     return corr
 
 
-#%%
-
-# --- Effect size utilities ---
+#%% --- Effect size utilities ---
 def cohen_d(x,y,rm_nan=False):
     # Computes Cohen's d for two arrays.
     if rm_nan:
@@ -78,7 +92,6 @@ def cohen_d(x,y,rm_nan=False):
                                                  (ny-1)*(np.std(y, ddof=1)**2.) ) / dof)
 
 
-
 from scipy.special import gamma
 def hedge_g(x,y):
     nx, ny = len(x) , len(y)
@@ -86,7 +99,6 @@ def hedge_g(x,y):
     if (nx+ny) <= 40: g_coeff = ( gamma(dof/2.) ) / ( np.sqrt(dof/2.)*gamma((dof-1.)/2.) )
     else: g_coeff = ( 1. - 3./(4.*(nx+ny) - 9.) )
     return g_coeff*(np.mean(x)-np.mean(y)) / np.sqrt(((nx-1)*(np.std(x,ddof=1)**2.)+(ny-1)*(np.std(y,ddof=1)**2.))/dof)
-
 
 
 def cohen_d_mat(x2d, y2d, rm_extreme=False, n_std=4):
@@ -189,9 +201,9 @@ def rm_outlier(arr_1,arr_2,n_std=4.,return_mask=False):
 
 
 
-def cohen_d_ci(x,y, confidence=.95, n_boot=20000, n_sample=None,
-               method='per', decimals=3, 
-               return_dist=False, tail='two-sided', rm_nan=False, 
+def cohen_d_ci(x, y, confidence=0.95, n_boot=10000, n_sample=None,
+               method='per', decimals=5, seed=None,  
+               return_dist=False, alternative='two-sided', rm_nan=False, 
                rm_extreme=False, r2z_xform=False):
     
     # confidence=.68 for std.
@@ -199,8 +211,13 @@ def cohen_d_ci(x,y, confidence=.95, n_boot=20000, n_sample=None,
     # confidence = 0.95
     # default percentile CI to make it consistent with p-value. 
     
-    x = np.array(x, copy=True)
-    y = np.array(y, copy=True)
+    assert method in ['norm', 'normal', 'percentile', 'per', 'bca', 'cper']
+    assert alternative in ['two-sided', 'one-sided']
+    assert isinstance(confidence, float) and 0 < confidence < 1
+    
+    
+    x = np.array(x)
+    y = np.array(y)
 
     if r2z_xform:
         x[x==1] = 1.0 - 1e-16
@@ -217,35 +234,29 @@ def cohen_d_ci(x,y, confidence=.95, n_boot=20000, n_sample=None,
         if np.any(np.r_[x_out_mask,y_out_mask]): 
             print('removed x: %d, y: %d'%(sum(x_out_mask),sum(y_out_mask)))
     
-    n_x = x.size
-    assert x.ndim == 1
-    assert n_x > 1
+    nx = len(x)
+    assert x.ndim == 1 and nx > 1
 
-    n_y = y.size
-    assert y.ndim == 1
-    assert n_y > 1
-
-    assert (n_x >= 15 and n_y >= 15), \
-        'Not enough sample size for computation: n_x: %d, n_y: %d '%(n_x,n_y)
-
-    assert isinstance(confidence, float)
-    assert 0 < confidence < 1
-    if not method in ['normal', 'percentile', 'per', 'cper', 'bca' ]:
-        raise ValueError('Undefined method in cohen_d_CI!')
+    ny = len(y)
+    assert y.ndim == 1 and ny > 1
+    
+    
+    assert (nx >= 15 and ny >= 15), \
+        'Not enough sample size for computation: nx: %d, ny: %d '%(nx, ny)
 
     if n_sample is not None:
         n_sample_x = n_sample
         n_sample_y = n_sample
     else:
-        n_sample_x = n_x
-        n_sample_y = n_y
+        n_sample_x = nx
+        n_sample_y = ny
         
 
-    inds_x = np.random.randint(n_x, size=(n_sample_x,n_boot))
-    inds_y = np.random.randint(n_y, size=(n_sample_y,n_boot))
-    # inds_x = np.random.choice(n_x, size=(n_sample_x,n_boot),replace=True)      
-    # inds_y = np.random.choice(n_y, size=(n_sample_y,n_boot),replace=True)      
-    
+    # Bootstrap process
+    rng = np.random.default_rng(seed=seed)
+    inds_x = rng.integers(nx, size=(n_sample_x, n_boot))
+    inds_y = rng.integers(ny, size=(n_sample_y, n_boot))
+
     x_sample = x[inds_x]
     y_sample = y[inds_y]
     
@@ -283,47 +294,236 @@ def cohen_d_ci(x,y, confidence=.95, n_boot=20000, n_sample=None,
         ul = np.percentile(bootstat, pct_ul)
         ci = [ll, ul]
 
-
-    ci = np.round(ci, decimals)
     # Compute bootstrap p-value.
-    # pval = (np.sum(bootstat<=0.)+1.)/float(len(bootstat)+1.) if np.mean(bootstat)>=0 \
-        # else (np.sum(bootstat>=0.)+1.)/float(len(bootstat)+1.)
+    p_val = bootstrap_pval(bootstat, reference, alternative)
     
-    pval = (np.sum(bootstat<=0.)+1.)/float(len(bootstat)+1.) if reference>=0 \
-        else (np.sum(bootstat>=0.)+1.)/float(len(bootstat)+1.)
-    
-    if tail == 'two-sided':
-        pval = pval*2.
-        
     if return_dist:
-        return reference.round(3), np.mean(bootstat).round(3), \
-            [ ci[0].round(3), ci[1].round(3)], pval.round(6), bootstat
+        return reference.round(decimals), np.mean(bootstat).round(decimals), \
+            [ ci[0].round(decimals), ci[1].round(decimals) ], p_val.round(decimals), bootstat
+
+    return reference.round(decimals), np.mean(bootstat).round(decimals), \
+        [ ci[0].round(decimals), ci[1].round(decimals) ], p_val.round(decimals)
+
+
+
+from scipy.stats import rankdata
+from scipy.stats import pearsonr, spearmanr
+
+def bootstrap_pval(x_boots, x_estimate=None, alternative='two-sided'):
+    """
+    Compute p-value from a bootstrap distribution.
+    
+    The null hypothesis is that the mean of the distribution 
+    from which x is sampled is zero.
+    
+    Parameters
+    ----------
+    x_boots : array_like
+        The bootstrap sample.
+    x_estimate : float
+        The original estimate of x.
+    alternative : str, optional
+        Specifies the alternative hypothesis ('two-sided' or 'one-sided').
+    
+    Returns
+    -------
+    float
+        The computed p-value.
+    """
+    
+    x_boots = np.array(x_boots)
+    assert x_boots.ndim == 1
+    assert alternative in ['two-sided', 'one-sided']
+    
+    if x_estimate is None:
+        x_estimate = np.mean(x_boots)
+    
+    # compute for one-sided
+    if x_estimate == 0:
+        p_val = 0.5
     else:
-        return reference.round(3), np.mean(bootstat).round(3), \
-            [ ci[0].round(3), ci[1].round(3)], pval.round(6)
-
-
-
-#%% Bootstrap p-value
-get_bootstrappval = lambda x: ( (np.sum(x<=0)+1.)/float(len(x)+1.) if np.mean(x)>0 \
-                             else (np.sum(x>=0)+1.)/float(len(x)+1.) ) * 2. # two-sided.
-
-get_bootstrappval_1sided = lambda x: ( (np.sum(x<=0)+1.)/float(len(x)+1.) if np.mean(x)>0 \
-                             else (np.sum(x>=0)+1.)/float(len(x)+1.) )
+        p_val = min( np.sum(x_boots > 0)+1, np.sum(x_boots < 0)+1 ) / (len(x_boots)+1)
     
+    # Return the appropriate p-value based on the 'alternative' parameter
+    if alternative=='two-sided':
+        p_val = 2 * p_val
+
+    return min(p_val, 1.0)
+
+
+def bootstrap_pval_oldv(x_boots, x_estimate=None, alternative='two-sided'):
+    """
     
-def get_bootstrappval_altv(x):
+    Older version
+    
+    Compute p-value from a bootstrap distribution.
+    
+    The null hypothesis is that the mean of the distribution 
+    from which x is sampled is zero.
+
+    Parameters
+    ----------
+    x_boots : array_like
+        The bootstrap sample.
+    x_estimate : float
+        The original estimate of x.
+    alternative : str, optional
+        Specifies the alternative hypothesis ('two-sided' or 'one-sided').
+    
+    Returns
+    -------
+    float
+        The computed p-value.
+    """
+
+    x = np.array(x_boots)
+    assert x.ndim == 1
+    assert alternative in ['two-sided', 'one-sided']
+
+    if x_estimate is None:
+        x_estimate = np.mean(x_boots)
+    
+    if x_estimate > 0:
+        p_1 = (np.sum(x<=0)+1.)/(x.size+1.)
+        p_2 = (np.sum(x>0)+1.)/(x.size+1.)
+    elif x_estimate < 0:
+        p_1 = (np.sum(x<0)+1.)/(x.size+1.)
+        p_2 = (np.sum(x>=0)+1.)/(x.size+1.)
+    else: 
+        p_1 = (np.sum(x<=0)+1.)/(x.size+1.)
+        p_2 = (np.sum(x>=0)+1.)/(x.size+1.)
+
+    # Return the appropriate p-value based on the 'alternative' parameter
+    if alternative=='two-sided':
+        return 2.*np.min([p_1,p_2])
+    elif alternative=='one-sided':
+        return np.min([p_1,p_2])
+
+
+def rankzscore(x, axis):
+    """
+    Compute the z-score of the rank-transformed data along a specified axis.
+
+    Parameters
+    ----------
+    x : array_like
+        The data array to transform.
+    axis : int
+        The axis along which to compute the ranks and z-scores.
+
+    Returns
+    -------
+    array_like
+        The z-scores of the rank-transformed data.
+    """
+    return zscore(np.apply_along_axis(rankdata, axis, x))
+
+
+def _bootstrap_pearson(x, y, boot_inds, axis=1):
+    '''
+    Function to bootstrap Pearson correlation
+
+    if axis=1, compares rows of x[boot_inds] and y[boot_inds], 
+    i.e., boots_inds has the shape of (n_samples, x.shape[0]), 
+    
+    if axis=0, compares columns of x[boot_inds] and y[boot_inds], 
+    i.e., boots_inds has the shape of (x.shape[0], n_samples)
+    '''
+    return (zscore(x[boot_inds], axis=axis) * zscore(y[boot_inds], axis=axis)).mean(axis=axis)
+
+def _bootstrap_spearman(x, y, boot_inds, axis=1):
+    # Function to bootstrap Spearman correlation
+    return (rankzscore(x[boot_inds], axis) * rankzscore(y[boot_inds], axis)).mean(axis=axis)
+
+def _bootstrap_mean_diff(x, y, boot_inds, boot_inds2, axis=1):
+    # Function to bootstrap mean difference
+    return np.mean(x[boot_inds], axis=axis) - np.mean(y[boot_inds2], axis=axis)
+
+
+stat_funcs = {'pearson': lambda a, b: pearsonr(a, b)[0],
+              'spearman': lambda a, b: spearmanr(a, b)[0],
+              'mean_diff': lambda a, b: np.mean(a) - np.mean(b)}
+
+
+def bootstrap_ci(x, y, func='pearson', confidence=0.95, n_boots=10000, n_samples=None,
+                 seed=None, alternative='two-sided', return_dist=False, decimals=5):
+    """
+    Calculate the bootstrap confidence interval for a given statistic.
+
+    Parameters
+    ----------
+    x, y : array_like
+        Input data arrays.
+    func : str, optional
+        The statistic to be computed. Must be 'pearson', 'spearman', or 'mean_diff'.
+    confidence : float, optional
+        The confidence level for the interval.
+    n_boots : int, optional
+        The number of bootstrap samples to draw.
+    n_samples : int or None, optional
+        The number of samples to draw in each bootstrap iteration, makes it like jackknife.
+    seed : int or None, optional
+        Seed for the random number generator.
+    alternative : str, optional
+        Specifies the alternative hypothesis ('two-sided' or 'one-sided').
+    return_dist : bool, optional
+        If True, returns the bootstrap distribution.
+
+    Returns
+    -------
+    tuple
+        Tuple containing the original statistic, mean of bootstrap distribution, 
+        confidence interval, p-value, and optionally the bootstrap distribution.
+    """
+    
+    # Validation of inputs
+    assert func in [ 'pearson', 'spearman', 'mean_diff'], f'func={func} is undefined!'
+    assert alternative in ['two-sided', 'one-sided']
+    assert isinstance(confidence, float) and 0 < confidence < 1
+
     x = np.array(x)
-    if np.mean(x) >=0:
-        p_1 = (np.sum(x<=0)+1.)/float(len(x)+1.)
-        p_2 = (np.sum(x>0)+1.)/float(len(x)+1.)
+    nx = len(x)
+    assert x.ndim == 1 and nx > 1
 
-        return 2.*np.min([p_1,p_2])
+    y = np.array(y)
+    ny = len(y)
+    assert y.ndim == 1 and ny > 1
 
+    # if not, we can use: n_sample = min(nx, ny); but be careful!
+    assert nx == ny
+    
+    if n_samples is None:
+        n_samples = nx
+        
+    alpha = 1 - confidence
+    alphas = np.array([alpha/2, 1-alpha/2])
+
+    # Compute the original statistic based on the specified function.
+    org_stat = stat_funcs[func](x, y)
+    
+    # Bootstrap process
+    rng = np.random.default_rng(seed=seed)
+    boot_inds = rng.integers(x.shape[0], size=(n_boots, n_samples))
+    if func=='mean_diff':
+        boot_inds2 = rng.integers(y.shape[0], size=(n_boots, n_samples))
+    
+    # Compute the bootstrap statistic based on the specified function.
+    if func == 'pearson':
+        boots_dist = _bootstrap_pearson(x, y, boot_inds)
+    elif func == 'spearman':
+        boots_dist = _bootstrap_spearman(x, y, boot_inds)
+    elif func == 'mean_diff':
+        boots_dist = _bootstrap_mean_diff(x, y, boot_inds, boot_inds2)
+    
+    # Confidence interval and p-values calculation
+    ci = np.percentile(boots_dist, alphas*100)
+    p_val = bootstrap_pval(boots_dist, org_stat, alternative)
+
+    if return_dist:
+        return org_stat, np.mean(boots_dist), ci, p_val, boots_dist
+    
+    if decimals is None:
+        return org_stat, np.mean(boots_dist), ci, p_val
     else:
-        p_1 = (np.sum(x<0)+1.)/float(len(x)+1.)
-        p_2 = (np.sum(x>=0)+1.)/float(len(x)+1.)
-        return 2.*np.min([p_1,p_2])
-
-
-
+        return org_stat.round(decimals), np.mean(boots_dist).round(decimals),\
+            ci.round(decimals), p_val.round(decimals)
